@@ -10,6 +10,7 @@ This directory contains the AWS CDK infrastructure code for deploying the GenAII
 
 ## Getting Started
 
+All of the following commands assuming you are in the top of the `infra-cdk/` directory
 ### Install Dependencies
 
 ```bash
@@ -62,7 +63,7 @@ backend:
 ## Project Structure
 
 ```
-infra/
+infra-cdk/
 ├── bin/
 │   └── gasp-cdk.ts          # CDK app entry point
 ├── lib/

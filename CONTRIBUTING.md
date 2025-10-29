@@ -73,7 +73,7 @@ TODO
 Familiarize yourself with the project structure:
 
 - `docs/`: Documentation files
-- `infra/`: Infrastructure as Code (IaC) lives here (CDK)
+- `infra-cdk/`: Infrastructure as Code (IaC) lives here (CDK)
 - `patterns/`: Implementation of Agentic patterns to be deployed into AgentCore
 - `scripts/`: Utility scripts for development, testing, and deployment
 - `frontend/`: Web UI components (React)

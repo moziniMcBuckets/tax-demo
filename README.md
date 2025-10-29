@@ -33,14 +33,14 @@ npm install
 
 Infrastructure:
 ```bash
-cd infra
+cd infra-cdk
 npm install
 ```
 
 ### 2. Deploy Infrastructure
 
 ```bash
-cd infra
+cd infra-cdk
 npm run build           # Compile TypeScript
 npx cdk bootstrap       # Only needed once per AWS account/region
 npx cdk deploy --all
@@ -67,7 +67,7 @@ genaiid-agentcore-starter-pack/
 │   │   └── styles/         # SCSS styles
 │   ├── public/             # Static assets
 │   └── package.json
-├── infra/                   # CDK infrastructure code
+├── infra-cdk/               # CDK infrastructure code
 │   ├── lib/                # CDK stack definitions
 │   │   └── utils/          # Utility functions
 │   ├── bin/                # CDK app entry point
@@ -87,7 +87,7 @@ genaiid-agentcore-starter-pack/
 
 ## Configuration
 
-Edit `infra/config.yaml` to customize:
+Edit `infra-cdk/config.yaml` to customize:
 
 - Stack name
 - Custom domain (optional)
@@ -129,7 +129,7 @@ Edit `infra/config.yaml` to customize:
 
 ### Infrastructure Changes
 
-- Modify stacks in `infra/lib/`
+- Modify stacks in `infra-cdk/lib/`
 - Build TypeScript: `npm run build`
 - Deploy changes with `npx cdk deploy --all`
 
@@ -148,7 +148,7 @@ The CDK deployment will:
 To remove all resources:
 
 ```bash
-cd infra
+cd infra-cdk
 npx cdk destroy --all
 ```
 

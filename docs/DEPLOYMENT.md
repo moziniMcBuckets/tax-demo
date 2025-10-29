@@ -22,7 +22,7 @@ Before deploying, ensure you have:
 
 ### 1. Update Configuration File
 
-Edit `infra/config.yaml` to customize your deployment:
+Edit `infra-cdk/config.yaml` to customize your deployment:
 
 ```yaml
 stack_name_base: "your-project-name"  # Change this to your preferred stack name
@@ -126,7 +126,7 @@ npx cdk deploy --all
 To use a custom domain:
 
 1. Create an ACM certificate in `us-east-1` region
-2. Update `infra/config.yaml` with your domain and certificate ARN
+2. Update `infra-cdk/config.yaml` with your domain and certificate ARN
 3. Redeploy: `npm run build && npx cdk deploy --all`
 4. Update your DNS to point to the CloudFront distribution
 
@@ -140,7 +140,7 @@ To use a custom domain:
 
 To remove all resources:
 ```bash
-cd infra
+cd infra-cdk
 npx cdk destroy --all
 ```
 
