@@ -2,9 +2,9 @@ import os
 from strands import Agent
 from strands.models import BedrockModel
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
-from bedrock_agentcore.memory import MemoryClient
-
-from memory_hook import ShortTermMemoryHook
+# Note: Using Strands session manager for memory integration: https://strandsagents.com/latest/documentation/docs/community/session-managers/agentcore-memory/
+from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
+from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig
 
 app = BedrockAgentCoreApp()
 
@@ -13,22 +13,32 @@ def create_basic_agent(user_id, session_id) -> Agent:
     system_prompt = """You are a helpful assistant. Answer questions clearly and concisely."""
 
     bedrock_model = BedrockModel(
-    model_id= "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-    temperature=0.1
+        model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        temperature=0.1
     )   
     
-    memory_hook = ShortTermMemoryHook(
-        memory_id=os.environ.get("MEMORY_ID"),
-        memory_client=MemoryClient(),
-        actor_id=f"supervisor-{user_id}", 
-        session_id=session_id
+    memory_id = os.environ.get("MEMORY_ID")
+    if not memory_id:
+        raise ValueError("MEMORY_ID environment variable is required")
+    
+    # Configure AgentCore Memory using official session manager with basic memory config. 
+    # If memory was created with strategies (summaries/preferences/facts), add retrieval_config here to customize retrieval behavior
+    agentcore_memory_config = AgentCoreMemoryConfig(
+        memory_id=memory_id,
+        session_id=session_id,
+        actor_id=user_id
+    )
+    
+    session_manager = AgentCoreMemorySessionManager(
+        agentcore_memory_config=agentcore_memory_config,
+        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
     )
 
     return Agent(
         name="BasicAgent",
         system_prompt=system_prompt,
         model=bedrock_model,
-        hooks=[memory_hook],
+        session_manager=session_manager,
         trace_attributes={
             "user.id": user_id,
             "session.id": session_id,
@@ -38,9 +48,17 @@ def create_basic_agent(user_id, session_id) -> Agent:
 @app.entrypoint
 async def agent_stream(payload):
     """Main entrypoint for the agent using raw Strands streaming"""
-    user_query = payload["prompt"]
-    user_id = payload["userId"]
-    session_id = payload["runtimeSessionId"]
+    user_query = payload.get("prompt")
+    user_id = payload.get("userId")
+    session_id = payload.get("runtimeSessionId")
+    
+    if not all([user_query, user_id, session_id]):
+        yield {
+            "status": "error",
+            "error": "Missing required fields: prompt, userId, or runtimeSessionId"
+        }
+        return
+    
     try:
         agent = create_basic_agent(user_id, session_id)
         

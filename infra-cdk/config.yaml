@@ -10,4 +10,4 @@ frontend:
 
 backend:
   pattern: "strands-single-agent"  # Available patterns: strands-single-agent
-  memory_id: null # Optional: Provide memory ID to use, or leave null to create new memory
+  memory_id: null # Optional: Provide existing memory ID to reuse, or null to create new short-term memory

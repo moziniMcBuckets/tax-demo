@@ -32,6 +32,10 @@ export const invokeAgentCore = async (query, sessionId, onStreamUpdate) => {
     
     // Extract userId from the ID token (sub is the unique user identifier)
     const userId = session.tokens?.idToken?.payload?.sub;
+    
+    if (!userId) {
+      throw new Error('No valid user ID found in session. Please ensure you are authenticated.');
+    }
 
     if (!accessToken) {
       throw new Error('No valid access token found. Please ensure you are authenticated.');

@@ -320,7 +320,12 @@ export class BackendStack extends cdk.NestedStack {
     if (config.backend?.memory_id) {
       // Use existing memory ID from config
       memoryId = config.backend.memory_id
-      memoryArn = `arn:aws:bedrock-agentcore:${this.region}:${this.account}:memory/${memoryId}`
+      // Use CDK's Arn.format for safe ARN construction
+      memoryArn = cdk.Arn.format({
+        service: 'bedrock-agentcore',
+        resource: 'memory',
+        resourceName: memoryId,
+      }, cdk.Stack.of(this))
     } else {
       // Create new memory resource using CloudFormation 
       const memory = new cdk.CfnResource(this, "AgentMemory", {
@@ -329,7 +334,7 @@ export class BackendStack extends cdk.NestedStack {
           Name: `${config.stack_name_base.replace(/-/g, "_")}_${this.agentName.valueAsString}_Memory`,
           EventExpiryDuration: 7,
           Description: `Memory for ${config.stack_name_base} agent`,
-          MemoryStrategies: [],
+          MemoryStrategies: [], 
           MemoryExecutionRoleArn: agentRole.roleArn,
           Tags: {
             Name: `${config.stack_name_base}_Memory`,
