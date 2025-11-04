@@ -6,9 +6,10 @@ This guide walks you through deploying the GenAIID AgentCore Starter Pack (GASP)
 
 Before deploying, ensure you have:
 
-- **Node.js 18+** installed
+- **Node.js 18+** installed (see [AWS guide for installing Node.js on EC2](https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-up-node-on-ec2-instance.html))
 - **AWS CLI** configured with appropriate permissions
-- **AWS CDK CLI** installed: `npm install -g aws-cdk`
+- **AWS CDK CLI** installed: `npm install -g aws-cdk` (see [CDK Getting Started guide](https://docs.aws.amazon.com/cdk/v2/guide/getting-started.html))
+- **Docker** installed. (see [Install Docker Engine](https://docs.docker.com/engine/install/))
 - An AWS account with sufficient permissions to create:
   - S3 buckets
   - CloudFront distributions
@@ -52,7 +53,7 @@ cd ..
 
 Install infrastructure dependencies:
 ```bash
-cd infra
+cd infra-cdk
 npm install
 cd ..
 ```
