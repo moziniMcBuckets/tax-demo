@@ -68,7 +68,7 @@ export class GaspMainStack extends cdk.Stack {
     })
 
     new cdk.CfnOutput(this, "DeploymentCommand", {
-      value: `STACK_NAME=${props.config.stack_name_base} ./scripts/deploy-frontend.sh`,
+      value: `cd frontend && STACK_NAME=${props.config.stack_name_base} ./bin/amplify-deploy.sh`,
       description: "Command to deploy frontend manually",
     })
 
@@ -80,6 +80,12 @@ export class GaspMainStack extends cdk.Stack {
     new cdk.CfnOutput(this, "AmplifyUrl", {
       value: this.amplifyHostingStack.amplifyUrl,
       description: "Amplify Frontend URL (available after deployment)",
+    })
+
+    new cdk.CfnOutput(this, "StagingBucketName", {
+      value: this.amplifyHostingStack.stagingBucket.bucketName,
+      description: "S3 bucket for Amplify deployment staging",
+      exportName: `${props.config.stack_name_base}-StagingBucket`,
     })
   }
 }
