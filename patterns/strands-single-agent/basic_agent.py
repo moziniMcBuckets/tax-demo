@@ -1,73 +1,108 @@
-import os
 from strands import Agent
-from strands.models import BedrockModel
+from strands.tools.mcp import MCPClient
+from mcp.client.streamable_http import streamablehttp_client
+import os
+import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
-# Note: Using Strands session manager for memory integration: https://strandsagents.com/latest/documentation/docs/community/session-managers/agentcore-memory/
-from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
-from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
+from access_token import get_gateway_access_token
+import traceback
 
 app = BedrockAgentCoreApp()
 
-def create_basic_agent(user_id, session_id) -> Agent:
-    """Create a basic agent with simple functionality"""
-    system_prompt = """You are a helpful assistant. Answer questions clearly and concisely."""
+def get_ssm_parameter(parameter_name: str) -> str:
+    """Fetch parameter from SSM Parameter Store"""
+    region = os.environ.get('AWS_REGION', os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
+    ssm = boto3.client('ssm', region_name=region)
+    response = ssm.get_parameter(Name=parameter_name)
+    return response['Parameter']['Value']
 
-    bedrock_model = BedrockModel(
-        model_id="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-        temperature=0.1
-    )   
+async def create_gateway_mcp_client(access_token: str) -> MCPClient:
+    """Create MCP client for AgentCore Gateway with OAuth2 authentication"""
+    stack_name = os.environ.get('STACK_NAME', 'gasp-2-1')
     
-    memory_id = os.environ.get("MEMORY_ID")
-    if not memory_id:
-        raise ValueError("MEMORY_ID environment variable is required")
+    print(f"[AGENT] Creating Gateway MCP client for stack: {stack_name}")
     
-    # Configure AgentCore Memory with short-term memory (conversation history only)
-    # To enable long-term strategies (summaries, preferences, facts), see docs/MEMORY_INTEGRATION.md
-    agentcore_memory_config = AgentCoreMemoryConfig(
-        memory_id=memory_id,
-        session_id=session_id,
-        actor_id=user_id
+    # Fetch Gateway URL from SSM
+    gateway_url = get_ssm_parameter(f'/{stack_name}/gateway_url')
+    print(f"[AGENT] Gateway URL from SSM: {gateway_url}")
+    
+    # Create MCP client with Bearer token authentication
+    gateway_client = MCPClient(
+        lambda: streamablehttp_client(
+            url=gateway_url,
+            headers={"Authorization": f"Bearer {access_token}"}
+        ),
+        prefix="gateway"
     )
     
-    session_manager = AgentCoreMemorySessionManager(
-        agentcore_memory_config=agentcore_memory_config,
-        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
-    )
+    print(f"[AGENT] Gateway MCP client created successfully")
+    return gateway_client
 
-    return Agent(
-        name="BasicAgent",
-        system_prompt=system_prompt,
-        model=bedrock_model,
-        session_manager=session_manager,
-        trace_attributes={
-            "user.id": user_id,
-            "session.id": session_id,
-        }
-    )
+async def create_basic_agent() -> Agent:
+    """Create a basic agent with Gateway MCP tools"""
+    system_prompt = """You are a helpful assistant with access to tools via the Gateway.
+    When asked about your tools, list them and explain what they do."""
+
+    try:
+        print("[AGENT] Starting agent creation with Gateway tools...")
+        
+        # Get OAuth2 access token for Gateway
+        print("[AGENT] Step 1: Getting OAuth2 access token...")
+        access_token = await get_gateway_access_token()
+        print(f"[AGENT] Got access token: {access_token[:20]}...")
+        
+        # Create Gateway MCP client with authentication
+        print("[AGENT] Step 2: Creating Gateway MCP client...")
+        gateway_client = await create_gateway_mcp_client(access_token)
+        print("[AGENT] Gateway MCP client created successfully")
+        
+        print("[AGENT] Step 3: Creating Agent with Gateway tools...")
+        agent = Agent(
+            system_prompt=system_prompt,
+            name="BasicAgent",
+            tools=[gateway_client]
+        )
+        print("[AGENT] Agent created successfully with Gateway tools")
+        return agent
+        
+    except Exception as e:
+        print(f"[AGENT ERROR] Error creating Gateway client: {e}")
+        print(f"[AGENT ERROR] Exception type: {type(e).__name__}")
+        print(f"[AGENT ERROR] Traceback:")
+        traceback.print_exc()
+        print("[AGENT] Falling back to agent without Gateway tools")
+        
+        return Agent(
+            system_prompt="You are a helpful assistant. Note: Gateway tools are not available.",
+            name="BasicAgent"
+        )
 
 @app.entrypoint
-def invoke(payload):
+async def invoke(payload=None):
     """Main entrypoint for the agent"""
-    user_query = payload.get("prompt")
-    user_id = payload.get("userId")
-    session_id = payload.get("runtimeSessionId")
-    
-    if not all([user_query, user_id, session_id]):
-        return {
-            "status": "error",
-            "error": "Missing required fields: prompt, userId, or runtimeSessionId"
-        }
-    
     try:
-        agent = create_basic_agent(user_id, session_id)
-        response = agent(user_query)
+        print(f"[INVOKE] Starting invocation with payload: {payload}")
+        
+        # Get the query from payload
+        query = payload.get("prompt", "Hello, how are you?") if payload else "Hello, how are you?"
+        print(f"[INVOKE] Query: {query}")
 
+        # Create and use the agent
+        print("[INVOKE] Creating agent...")
+        agent = await create_basic_agent()
+        
+        print(f"[INVOKE] Agent created, invoking with query...")
+        response = agent(query)
+
+        print(f"[INVOKE] Got response, returning...")
         return {
             "status": "success",
             "response": response.message['content'][0]['text']
         }
 
     except Exception as e:
+        print(f"[INVOKE ERROR] Error in invoke: {e}")
+        traceback.print_exc()
         return {
             "status": "error",
             "error": str(e)
