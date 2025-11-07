@@ -101,7 +101,7 @@ This script automatically:
 You will see the URL for application in the script's output, which will look similar to this:
 
 ```
-ℹ App URL: https://main.d456ri99bnw8nq.amplifyapp.com
+ℹ App URL: https://main.d123abc456def7.amplifyapp.com
 ```
 
 #### Understanding aws-exports.json
@@ -212,7 +212,7 @@ cd infra-cdk
 cdk destroy --force
 ```
 
-**Warning**: This will delete all data including S3 buckets and ECR images.
+**Warning**: This will delete all data including S3 buckets created during deployment and ECR images.
 
 ## Troubleshooting
 
