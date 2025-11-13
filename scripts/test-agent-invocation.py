@@ -20,7 +20,7 @@ import time
 import socket
 import argparse
 import getpass
-import subprocess
+import subprocess  # nosec B404 - subprocess used securely with explicit parameters
 import signal
 import atexit
 from pathlib import Path
@@ -105,7 +105,7 @@ def start_local_agent(memory_id: str, region: str) -> subprocess.Popen:
     
     # Start agent process
     try:
-        _agent_process = subprocess.Popen(
+        _agent_process = subprocess.Popen(  # nosec B607 - command constructed from validated path, shell=False
             ["uv", "run", str(agent_path)],
             env=env,
             stdout=subprocess.PIPE,

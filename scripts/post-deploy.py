@@ -35,7 +35,7 @@ def generate_aws_exports(stack_name):
             "--output", "json"
         ]
 
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 - command constructed from safe list, not user input
             command, 
             capture_output=True, 
             text=True, 
