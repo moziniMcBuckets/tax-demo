@@ -10,7 +10,7 @@ Before deploying, ensure you have:
 - **AWS CLI** configured with credentials (`aws configure`) - see [AWS CLI Configuration guide](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html)
 - **AWS CDK CLI** installed: `npm install -g aws-cdk` (see [CDK Getting Started guide](https://docs.aws.amazon.com/cdk/v2/guide/getting-started.html))
 - **Python 3.8+** (standard library only - no virtual environment needed for deployment)
-- **Docker** installed. (see [Install Docker Engine](https://docs.docker.com/engine/install/)). See below if you have a non-ARM machine (e.g. you are deploying from ubuntu)
+- **Docker** installed and running (see [Install Docker Engine](https://docs.docker.com/engine/install/)). Verify with `docker ps`. Alternatively, [Finch](https://github.com/runfinch/finch) can be used on Mac. See below if you have a non-ARM machine.
 - An AWS account with sufficient permissions to create:
   - S3 buckets
   - CloudFront distributions
@@ -170,19 +170,25 @@ cdk destroy --force
 
 ### Common Issues
 
-1. **"Architecture incompatible" or "exec format error" during Docker build**
+1. **`cdk deploy` fails with Docker errors**
+
+   - Ensure Docker is installed and the daemon is running: `docker ps`
+   - On Mac, open Docker Desktop or start Finch: `finch vm start`
+   - On Linux: `sudo systemctl start docker`
+
+2. **"Architecture incompatible" or "exec format error" during Docker build**
 
    - This occurs when deploying from a non-ARM machine without cross-platform build setup
    - Follow the "Docker Cross-Platform Build Setup" instructions in the Prerequisites section
    - Ensure you've installed QEMU emulation: `docker run --privileged --rm tonistiigi/binfmt --install all`
    - Verify ARM64 support: `docker buildx ls` should show `linux/arm64` in platforms
 
-2. **"Agent Runtime ARN not configured"**
+3. **"Agent Runtime ARN not configured"**
 
    - Ensure the backend stack deployed successfully
    - Check that SSM parameters were created correctly
 
-3. **Authentication errors**
+4. **Authentication errors**
 
    - Verify you created a Cognito user
    - Check that the user's email is verified
