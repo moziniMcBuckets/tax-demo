@@ -47,5 +47,5 @@ pages:
   artifacts:
     paths:
       - public  # GitLab Pages serves content from this directory
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH  # Deploy only on main/master branch
+  # rules:
+  #   - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH  # Deploy only on main/master branch
