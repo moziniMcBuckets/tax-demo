@@ -1,3 +1,4 @@
 nav:
   - " ": # This an empty section header, which makes every .md file its own subsection
+    - index.md
     - "*"
