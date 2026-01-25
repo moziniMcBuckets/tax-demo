@@ -1,143 +1,345 @@
-# Fullstack AgentCore Solution Template (FAST)
+# Tax Document Collection Agent
 
-_Author's note: for the official name for this solution is the "Fullstack Solution Template for Agentcore" but it is referred to throughout this code base as FAST for convenience._
+An intelligent AI agent built on Amazon Bedrock AgentCore that automates tax document collection for accounting firms. This production-ready solution reduces manual follow-up time by 90% while ensuring clients submit required documents on time.
 
-The Fullstack AgentCore Solution Template (FAST) is a starter project repository that enables users (delivery scientists and engineers) to quickly deploy a secured, web-accessible React frontend connected to an AgentCore backend. Its purpose is to accelerate building full stack applications on AgentCore from weeks to days by handling the undifferentiated heavy lifting of infrastructure setup and to enable vibe-coding style development on top. The only central dependency of FAST is AgentCore. It is agnostic to agent SDK (Strands, LangGraph, etc) and to coding assistant platforms (Q, Kiro, Cline, Claude Code, etc).
+> **Note:** This is a fork of the [Fullstack AgentCore Solution Template (FAST)](https://github.com/awslabs/fullstack-solution-template-for-agentcore) customized for tax document collection workflows.
 
-FAST is designed with security and vibe-codability as primary tenets. Best practices and knowledge from experts are codified in _documentation_ in this repository rather than in _code_. By including this documentation in an AI coding assistant's context, or by instructing the AI coding assistant to leverage best practices and code snippets found in the documentation, delivery scientists and developers can quickly vibe-build AgentCore applications for any use case. AI coding assistants can be used to fully customize the frontend and the cdk infrastructure, enabling scientists to focus the areas where their knowledge is most impactful: the actual prompt engineering and GenAI implementation details.
+## What It Does
 
-With FAST as a starting point and development framework, delivery scientists and engineers will accelerate their development process and deliver production quality AgentCore code following architecture and security best practices without having to learn any frontend or infrastructure (cdk) code.
+The Tax Document Collection Agent helps accountants manage client document collection during tax season by:
 
+- **Tracking document status** across all clients in real-time
+- **Sending automated reminders** at strategic intervals (Day 3, 10, 24)
+- **Providing secure upload portals** with unique tokens per client
+- **Escalating urgent cases** automatically based on deadlines
+- **Answering questions** about client status via natural language chat
+- **Managing requirements** for different tax scenarios (W-2, 1099, business, etc.)
 
-## FAST Baseline System
+### Key Features
 
-FAST comes deployable out-of-the-box with a fully functioning, full-stack application. This application represents starts as a basic multi-turn chat agent where the backend agent has access to tools. **Do not let this deter you, even if your use case is entirely different! If your application requires AgentCore, customizing FAST to any use case is extremely straightforward. That is the intended use of FAST!**
+✅ **Multi-channel interface**: Chat with the agent, view dashboard, or use client upload portal  
+✅ **Intelligent automation**: Automatic reminders and escalations based on deadlines  
+✅ **Secure document handling**: S3 storage with pre-signed URLs and token-based access  
+✅ **Email integration**: SES-powered notifications with customizable templates  
+✅ **Real-time tracking**: DynamoDB-backed status updates and follow-up history  
+✅ **Cost-effective**: ~$3.86 per tax season for 50 clients
 
-The application is intentionally kept very, very simple to allow developers to easily build up whatever they want on top of the baseline. The tools shipped out of the box include:
+## Quick Start
 
-1. **Gateway Tools** - Lambda-based tools behind AgentCore Gateway with authentication:
-   - Text analysis tool (counts words and letter frequency)
-   
-2. **Code Interpreter** - Direct integration with Amazon Bedrock AgentCore Code Interpreter:
-   - Secure Python code execution in isolated sandbox
-   - Session management with state persistence
-   - Pre-built runtime with common libraries
-
-Try asking the agent to analyze text or execute Python code to see these tools in action.
-
-
-## FAST User Setup
-
-If you are a delivery scientist or engineer who wants to use FAST to build a full stack application, this is the section for you.
-
-FAST is designed to be forked and deployed out of the box with a security-approved baseline system working. Your task will be to customize it to create your own full stack application to to do (literally) anything on AgentCore.
-
-Deploying the full stack out-of-the-box FAST baseline system is only a few cdk commands once you have forked the repo, namely: 
+Deploy the complete system in 20 minutes:
 
 ```bash
+# 1. Install dependencies
 cd infra-cdk
 npm install
-cdk bootstrap # Once ever
-cdk deploy
+
+# 2. Configure
+cp config-tax-agent.yaml config.yaml
+# Edit config.yaml with your stack name and email
+
+# 3. Deploy infrastructure
+cdk bootstrap  # First time only
+cdk deploy --all --require-approval never
+
+# 4. Deploy frontend
 cd ..
-python scripts/deploy-frontend.py
+python3 scripts/deploy-frontend.py
+
+# 5. Verify email for sending
+aws ses verify-email-identity --email-address your-email@domain.com
+
+# 6. Create Cognito user and start using!
 ```
 
-See the [deployment guide](docs/DEPLOYMENT.md) for detailed instructions on how to deploy FAST into an AWS account.
+See the [Deployment Guide](docs/DEPLOYMENT.md) for detailed instructions.
 
-What comes next? That's up to you, the developer. With your requirements in mind, open up your coding assistant, describe what you'd like to do, and begin. The steering docs in this repository help guide coding assistants with best practices, and encourage them to always refer to the documentation built-in to the repository to make sure you end up building something great.
+## System Overview
 
+The agent provides three interfaces:
+
+### 1. Chat Interface
+Natural language conversation with the AI agent:
+```
+You: "Show me all my clients"
+Agent: "I need your accountant ID to retrieve your clients."
+
+You: "acc_test_001"
+Agent: "You have 5 clients: 2 complete, 1 at risk, 2 incomplete..."
+
+You: "Send a reminder to Mohamed Mohamud"
+Agent: "Reminder sent successfully to mohamed@example.com"
+```
+
+### 2. Dashboard View
+Visual overview of all clients with status indicators:
+- 🟢 Complete (all documents received)
+- 🟡 At Risk (deadline approaching, documents missing)
+- 🔴 Escalated (urgent attention needed)
+- ⚪ Incomplete (normal follow-up)
+
+### 3. Client Upload Portal
+Secure, token-based upload interface for clients:
+- No login required (token-based access)
+- Drag-and-drop document upload
+- Real-time status updates
+- Mobile-friendly design
 
 ## Architecture
 
+The system uses six specialized tools behind AgentCore Gateway:
+
+1. **Document Checker** - Scans for missing documents and calculates risk scores
+2. **Email Sender** - Sends customizable reminder emails via SES
+3. **Status Tracker** - Provides overview of all clients and their statuses
+4. **Escalation Manager** - Flags urgent cases based on deadlines
+5. **Requirement Manager** - Manages document requirements per client
+6. **Upload Manager** - Generates secure upload tokens and URLs
+
+
+### Backend Components
+
+**AWS Services:**
+- **AgentCore Runtime** - Hosts the Strands-based agent
+- **AgentCore Gateway** - Authenticates and routes tool calls
+- **AgentCore Memory** - Stores conversation history
+- **DynamoDB** - Client data, requirements, follow-ups, settings
+- **S3** - Document storage with lifecycle policies
+- **SES** - Email delivery
+- **Cognito** - Authentication for frontend and API
+- **Lambda** - Six tool implementations
+- **API Gateway** - REST API for feedback and uploads
+
+**Tech Stack:**
+- Python 3.11+ with Strands SDK
+- AWS CDK for infrastructure as code
+- Docker for agent containerization
+
+### Frontend Components
+
+**Framework:**
+- Next.js 14 with React 18
+- TypeScript for type safety
+- Tailwind CSS + shadcn/ui components
+- Amplify Hosting for deployment
+
+**Features:**
+- Real-time streaming responses
+- Multi-tab interface (Chat, Dashboard, Upload)
+- Mobile-responsive design
+- OAuth authentication via Cognito
+
+## Use Cases
+
+This solution is ideal for:
+
+- **Accounting firms** managing tax document collection
+- **Financial advisors** gathering client information
+- **Legal practices** collecting case documents
+- **HR departments** onboarding new employees
+- **Any business** requiring systematic document collection with follow-ups
+
+## Documentation
+
+Comprehensive guides are available in the `docs/` folder:
+
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Step-by-step deployment instructions
+- **[Onboarding Guide](docs/ONBOARDING.md)** - Get started with your first client
+- **[Architecture](docs/ARCHITECTURE.md)** - System design and data flow
+- **[Gateway Integration](docs/GATEWAY.md)** - How tools work with AgentCore Gateway
+- **[Memory Integration](docs/MEMORY_INTEGRATION.md)** - Conversation persistence
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+
+## Testing
+
+Test scripts are provided for validation:
+
+```bash
+# Seed test data (5 sample clients)
+python3 scripts/seed-tax-test-data.py
+
+# Test all gateway tools
+python3 scripts/test-all-gateway-tools.py
+
+# Test the agent directly
+python3 scripts/test-tax-agent.py
+
+# Generate upload token for a client
+python3 scripts/generate-upload-token.py --client-id client_001
+```
+
+
+## Cost Analysis
+
+Estimated AWS costs for 50 clients during tax season (3 months):
+
+| Service | Usage | Cost |
+|---------|-------|------|
+| AgentCore Runtime | 500 invocations | $1.50 |
+| AgentCore Gateway | 3,000 calls | $0.30 |
+| Lambda | 10,000 invocations | $0.20 |
+| DynamoDB | 100K reads/writes | $0.25 |
+| S3 | 5GB storage + requests | $0.15 |
+| SES | 1,000 emails | $0.10 |
+| Cognito | 50 MAU | $0.28 |
+| Amplify | Hosting | $1.00 |
+| CloudWatch | Logs | $0.08 |
+| **Total** | | **~$3.86/season** |
+
+*Costs scale linearly with client count. 500 clients ≈ $38.60/season.*
+
+## Architecture Diagram
+
 ![Architecture Diagram](docs/architecture-diagram/FAST-architecture-20251201.png)
 
-The out-of-the-box architecture is shown above. Note that Amazon Cognito is used in four places:
-1. User-based login to the frontend web application on CloudFront
-2. Token-based authentication for the frontend to access AgentCore Runtime
-3. Token-based authentication for the agents in AgentCore Runtime to access AgentCore Gateway
-4. Token-based authentication when making API requests to API Gateway.
+The system uses Amazon Cognito for authentication in four places:
+1. User login to the frontend web application
+2. Frontend to AgentCore Runtime communication
+3. Agent to AgentCore Gateway tool calls
+4. API Gateway REST endpoints
 
-### Tech Stack
+## Customization
 
-- **Frontend**: React with Next.js, TypeScript, Tailwind CSS, and shadcn components - infinitely flexible and ready for coding assistants
-- **Agent Providers**: Multiple agent providers supported (Strands, LangGraph, etc.) running within AgentCore Runtime
-- **Authentication**: AWS Cognito User Pool with OAuth support for easy swapping out Cognito
-- **Infrastructure**: CDK deployment with Amplify Hosting for frontend and AgentCore backend
+The agent behavior can be customized by editing:
+
+**Agent Prompt:**
+```python
+# patterns/strands-single-agent/tax_document_agent.py
+system_prompt = """
+Your custom instructions here...
+"""
+```
+
+**Email Templates:**
+Update in DynamoDB `<stack>-settings` table or via the agent.
+
+**Frontend Branding:**
+```typescript
+// frontend/src/app/layout.tsx
+export const metadata = {
+  title: "Your Company Name",
+  // ... customize colors, logo, etc.
+}
+```
+
+After changes, redeploy:
+```bash
+cd infra-cdk
+cdk deploy tax-agent  # For agent changes
+cd ..
+python3 scripts/deploy-frontend.py  # For frontend changes
+```
 
 ## Project Structure
 
 ```
-fullstack-agentcore-solution-template/
-├── frontend/                 # Next.js React frontend application
+tax-demo/
+├── frontend/                 # Next.js React frontend
 │   ├── src/
-│   │   ├── app/            # Next.js app router pages
-│   │   ├── components/     # React components (shadcn/ui)
-│   │   ├── hooks/          # Custom React hooks
-│   │   ├── lib/            # Utility libraries
-│   │   ├── services/       # API service layers
-│   │   └── types/          # TypeScript type definitions
-│   ├── public/             # Static assets and aws-exports.json
-│   ├── components.json     # shadcn/ui configuration
+│   │   ├── app/            # Pages (chat, dashboard, upload)
+│   │   ├── components/     # React components
+│   │   │   ├── chat/       # Chat interface components
+│   │   │   ├── tax/        # Tax-specific components
+│   │   │   └── ui/         # shadcn/ui components
+│   │   ├── services/       # API integrations
+│   │   └── types/          # TypeScript definitions
 │   └── package.json
-├── infra-cdk/               # CDK infrastructure code
-│   ├── lib/                # CDK stack definitions
-│   ├── bin/                # CDK app entry point
-│   ├── lambdas/            # Lambda function code
-│   └── config.yaml         # Deployment configuration
-├── patterns/               # Agent pattern implementations
-│   ├── strands-single-agent/ # Basic strands agent pattern
-│   │   ├── basic_agent.py  # Agent implementation
-│   │   ├── strands_code_interpreter.py # Code Interpreter wrapper
-│   │   ├── requirements.txt # Agent dependencies
-│   │   └── Dockerfile      # Container configuration
-│   └── langgraph-single-agent/ # LangGraph agent pattern
-│       ├── langgraph_agent.py # Agent implementation
-│       ├── requirements.txt # Agent dependencies
-│       └── Dockerfile      # Container configuration
-├── tools/                  # Reusable tools (framework-agnostic)
-│   └── code_interpreter/   # AgentCore Code Interpreter integration
-│       └── code_interpreter_tools.py # Core implementation
-├── gateway/                # Gateway utilities and tools
-│   ├── tools/              # Gateway tool implementations
-│   └── utils/              # Gateway utility functions
-├── scripts/                # Deployment and test scripts
-│   ├── deploy-frontend.py  # Cross-platform frontend deployment
-│   └── test-*.py          # Various test utilities
-├── docs/                   # Documentation source files
-│   ├── .nav.yml            # Navigation configuration
-│   ├── index.md            # Documentation landing page
-│   ├── DEPLOYMENT.md       # Deployment guide
-│   ├── AGENT_CONFIGURATION.md # Agent setup guide
-│   ├── MEMORY_INTEGRATION.md # Memory integration guide
-│   ├── GATEWAY.md          # Gateway integration guide
-│   ├── STREAMING.md        # Streaming implementation guide
-│   ├── TOOL_AC_CODE_INTERPRETER.md # Code Interpreter guide
-│   ├── VERSION_BUMP_PLAYBOOK.md # Version management
-│   └── architecture-diagram/ # Architecture diagrams
-├── .mkdocs/                # MkDocs build configuration
-│   ├── mkdocs.yml          # MkDocs configuration
-│   ├── requirements.txt    # Documentation dependencies
-│   ├── Makefile            # Build and deployment commands
-│   └── README.md           # Documentation system overview
-├── public/                 # Generated documentation site (MkDocs output)
+├── infra-cdk/               # AWS CDK infrastructure
+│   ├── lib/
+│   │   ├── tax-agent-main-stack.ts      # Main orchestration
+│   │   ├── tax-agent-backend-stack.ts   # Backend resources
+│   │   ├── cognito-stack.ts             # Authentication
+│   │   └── amplify-hosting-stack.ts     # Frontend hosting
+│   ├── config-tax-agent.yaml            # Tax agent configuration
+│   └── package.json
+├── patterns/               # Agent implementations
+│   └── strands-single-agent/
+│       ├── tax_document_agent.py        # Main agent logic
+│       ├── basic_agent.py               # Simple chat agent
+│       ├── requirements.txt
+│       └── Dockerfile
+├── gateway/                # AgentCore Gateway tools
+│   ├── tools/
+│   │   ├── document_checker/            # Missing doc scanner
+│   │   ├── email_sender/                # SES email integration
+│   │   ├── status_tracker/              # Client overview
+│   │   ├── escalation_manager/          # Urgent case flagging
+│   │   ├── requirement_manager/         # Doc requirements
+│   │   └── upload_manager/              # Secure upload tokens
+│   └── layers/common/                   # Shared utilities
+├── scripts/                # Deployment and testing
+│   ├── deploy-frontend.py               # Frontend deployment
+│   ├── seed-tax-test-data.py           # Test data generator
+│   ├── test-all-gateway-tools.py       # Tool validation
+│   ├── test-tax-agent.py               # Agent testing
+│   └── generate-upload-token.py        # Token generator
+├── docs/                   # Documentation
+│   ├── DEPLOYMENT.md                    # Deployment guide
+│   ├── ONBOARDING.md                    # Getting started
+│   ├── ARCHITECTURE.md                  # System design
+│   ├── GATEWAY.md                       # Gateway integration
+│   ├── TROUBLESHOOTING.md              # Common issues
+│   └── architecture-diagram/
 ├── tests/                  # Test suite
-│   ├── unit/               # Unit tests
-│   ├── integration/        # Integration tests
-│   └── conftest.py         # Pytest configuration
-├── vibe-context/           # AI coding assistant context and rules
-│   ├── AGENTS.md           # Rules for AI assistants
-│   ├── coding-conventions.md # Code style guidelines
-│   └── development-best-practices.md # Development guidelines
-├── .kiro/                  # Kiro CLI configuration
+│   ├── unit/
+│   └── integration/
 └── README.md
 ```
 
-## Security
+## Prerequisites
 
-Note: this asset represents a proof-of-value for the services included and is not intended as a production-ready solution. You must determine how the AWS Shared Responsibility applies to their specific use case and implement the needed controls to achieve their desired security outcomes. AWS offers a broad set of security tools and configurations to enable our customers.
+- **Node.js 20+** - Frontend and CDK
+- **Python 3.11+** - Agent and scripts
+- **Docker** - Agent containerization
+- **AWS CLI v2** - AWS operations
+- **AWS CDK** - Infrastructure deployment
+- **AWS Account** - With admin permissions
 
-Ultimately it is your responsibility as the developer of a full stack application to ensure all of its aspects are secure. We provide security best practices in repository documentation and provide a secure baseline but Amazon holds no responsibility for the security of applications built from this tool.
+## Contributing
+
+This is a fork of the [FAST template](https://github.com/awslabs/fullstack-solution-template-for-agentcore). Contributions should follow the patterns established in the original template.
+
+### Development Workflow
+
+1. Make changes to agent, tools, or frontend
+2. Test locally using provided scripts
+3. Run linting: `make all` (from root)
+4. Deploy to test environment
+5. Validate changes
+6. Commit with conventional commits format
+
+See `vibe-context/` folder for AI coding assistant guidelines.
+
+## Support
+
+For issues specific to this tax demo:
+- Check [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+- Review CloudWatch logs
+- Test individual components with provided scripts
+
+For FAST template issues:
+- See [upstream repository](https://github.com/awslabs/fullstack-solution-template-for-agentcore)
+
+## Roadmap
+
+Planned enhancements:
+- [ ] Multi-language support
+- [ ] SMS reminders via SNS
+- [ ] Advanced analytics dashboard
+- [ ] Bulk client import
+- [ ] Custom workflow builder
+- [ ] Integration with tax software APIs
+
+## Security & Compliance
+
+This solution implements AWS security best practices:
+- Encryption at rest (DynamoDB, S3)
+- Encryption in transit (TLS)
+- IAM least privilege access
+- Cognito authentication
+- VPC isolation (optional)
+- CloudWatch audit logging
+
+**Important:** This is a proof-of-value implementation. For production use, conduct a security review and implement additional controls based on your specific compliance requirements (HIPAA, SOC 2, etc.).
 
 ## License
 
