@@ -2,7 +2,6 @@
 
 An intelligent AI agent built on Amazon Bedrock AgentCore that automates tax document collection for accounting firms. This production-ready solution reduces manual follow-up time by 90% while ensuring clients submit required documents on time.
 
-> **Note:** This is a fork of the [Fullstack AgentCore Solution Template (FAST)](https://github.com/awslabs/fullstack-solution-template-for-agentcore) customized for tax document collection workflows.
 
 ## What It Does
 
