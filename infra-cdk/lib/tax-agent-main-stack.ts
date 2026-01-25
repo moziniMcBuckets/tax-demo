@@ -98,28 +98,7 @@ export class TaxAgentMainStack extends cdk.Stack {
       exportName: `${props.config.stack_name_base}-RuntimeArn`,
     });
 
-    new cdk.CfnOutput(this, 'MemoryArn', {
-      value: this.backendStack.memoryArn,
-      description: 'AgentCore Memory ARN',
-      exportName: `${props.config.stack_name_base}-MemoryArn`,
-    });
-
-    new cdk.CfnOutput(this, 'GatewayUrl', {
-      value: this.backendStack.gatewayUrl,
-      description: 'AgentCore Gateway URL',
-      exportName: `${props.config.stack_name_base}-GatewayUrl`,
-    });
-
-    new cdk.CfnOutput(this, 'StagingBucketName', {
-      value: this.amplifyHostingStack.stagingBucket.bucketName,
-      description: 'S3 bucket for Amplify deployment staging',
-      exportName: `${props.config.stack_name_base}-StagingBucket`,
-    });
-
-    // Tax-specific outputs
-    new cdk.CfnOutput(this, 'DeploymentInstructions', {
-      value: 'Run: python scripts/deploy-frontend.py',
-      description: 'Next step: Deploy frontend',
-    });
+    // Note: memoryArn and gatewayUrl are not exposed by BackendStack
+    // They can be retrieved from SSM parameters or CloudFormation outputs if needed
   }
 }

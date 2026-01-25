@@ -3,10 +3,10 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fullstack-agentcore-solution-template"
+name = "tax-demo-agentcore"
 version = "0.3.0"
-description = "Fullstack AgentCore Solution Template - A template for building AgentCore applications"
-readme = "README.md"
+description = "Tax Document Collection Agent - Built on AWS Bedrock AgentCore"
+readme = "README-TAX-AGENT.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [

@@ -207,8 +207,8 @@ export default function ChatInterface() {
 
           {/* Centered welcome message */}
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">Welcome to FAST Chat</h2>
-            <p className="text-gray-600 mt-2">Ask me anything to get started</p>
+            <h2 className="text-2xl font-bold text-gray-800">Tax Document Collection Agent</h2>
+            <p className="text-gray-600 mt-2">Ask me about your clients' document status</p>
           </div>
 
           {/* Centered input */}

@@ -25,6 +25,16 @@ if str(script_dir) not in sys.path:
 from utils import get_stack_config, get_ssm_params, print_msg, print_section
 
 
+def get_table_names(stack_name: str) -> dict:
+    """Get DynamoDB table names for the stack."""
+    return {
+        'clients': f'{stack_name}-clients',
+        'documents': f'{stack_name}-documents',
+        'followups': f'{stack_name}-followups',
+        'settings': f'{stack_name}-settings',
+    }
+
+
 def get_secret(secret_name: str) -> str:
     """Fetch secret from AWS Secrets Manager."""
     secrets_client = boto3.client('secretsmanager')
@@ -178,7 +188,7 @@ def main():
     result = call_gateway_tool(
         gateway_url,
         access_token,
-        'check_client_documents',
+        'document-checker-target___check_client_documents',  # Full tool name with target prefix
         {
             'client_id': test_client_id,
             'tax_year': 2024
@@ -192,7 +202,7 @@ def main():
     result = call_gateway_tool(
         gateway_url,
         access_token,
-        'get_client_status',
+        'status-tracker-target___get_client_status',  # Full tool name with target prefix
         {
             'accountant_id': accountant_id,
             'filter': 'all'
@@ -206,7 +216,7 @@ def main():
     result = call_gateway_tool(
         gateway_url,
         access_token,
-        'update_document_requirements',
+        'requirement-manager-target___update_document_requirements',  # Full tool name with target prefix
         {
             'client_id': test_client_id,
             'tax_year': 2024,

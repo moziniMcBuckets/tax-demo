@@ -550,18 +550,94 @@ export class BackendStack extends cdk.NestedStack {
   }
 
   private createAgentCoreGateway(config: AppConfig): void {
-    // Create sample tool Lambda
-    const toolLambda = new lambda.Function(this, "SampleToolLambda", {
-      runtime: lambda.Runtime.PYTHON_3_13,
-      handler: "sample_tool_lambda.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "../../gateway/tools/sample_tool")),
-      timeout: cdk.Duration.seconds(30),
-      logGroup: new logs.LogGroup(this, "SampleToolLambdaLogGroup", {
-        logGroupName: `/aws/lambda/${config.stack_name_base}-sample-tool`,
-        retention: logs.RetentionDays.ONE_WEEK,
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
-      }),
-    })
+    // Get tax data layer table names
+    const clientsTableName = `${config.stack_name_base}-clients`;
+    const documentsTableName = `${config.stack_name_base}-documents`;
+    const followupsTableName = `${config.stack_name_base}-followups`;
+    const settingsTableName = `${config.stack_name_base}-settings`;
+    const clientBucketName = `${config.stack_name_base}-client-docs-${this.account}`;
+    const snsTopicArn = `arn:aws:sns:${this.region}:${this.account}:${config.stack_name_base}-escalations`;
+    const sesFromEmail = `noreply@${config.stack_name_base}.example.com`;
+
+    // Create tax Lambda tools with SHORT names for Gateway targets (no sample tool)
+    const taxLambdas: Array<{
+      id: string;
+      handler: string;
+      path: string;
+      env: { [key: string]: string };
+      targetName: string;
+      specPath: string;
+    }> = [
+      {
+        id: "TaxDocChecker",
+        handler: "document_checker_lambda.lambda_handler",
+        path: "document_checker",
+        env: { CLIENTS_TABLE: clientsTableName, DOCUMENTS_TABLE: documentsTableName, CLIENT_BUCKET: clientBucketName },
+        targetName: "doc-check",  // SHORT name (8 chars)
+        specPath: "document_checker"
+      },
+      {
+        id: "TaxEmail",
+        handler: "email_sender_lambda.lambda_handler",
+        path: "email_sender",
+        env: { CLIENTS_TABLE: clientsTableName, FOLLOWUP_TABLE: followupsTableName, SETTINGS_TABLE: settingsTableName, SES_FROM_EMAIL: sesFromEmail },
+        targetName: "email",  // SHORT name (5 chars)
+        specPath: "email_sender"
+      },
+      {
+        id: "TaxStatus",
+        handler: "status_tracker_lambda.lambda_handler",
+        path: "status_tracker",
+        env: { CLIENTS_TABLE: clientsTableName, DOCUMENTS_TABLE: documentsTableName, FOLLOWUP_TABLE: followupsTableName, SETTINGS_TABLE: settingsTableName },
+        targetName: "status",  // SHORT name (6 chars)
+        specPath: "status_tracker"
+      },
+      {
+        id: "TaxEscalate",
+        handler: "escalation_manager_lambda.lambda_handler",
+        path: "escalation_manager",
+        env: { CLIENTS_TABLE: clientsTableName, FOLLOWUP_TABLE: followupsTableName, SETTINGS_TABLE: settingsTableName, SES_FROM_EMAIL: sesFromEmail, ESCALATION_SNS_TOPIC: snsTopicArn },
+        targetName: "escalate",  // SHORT name (8 chars)
+        specPath: "escalation_manager"
+      },
+      {
+        id: "TaxReqMgr",
+        handler: "requirement_manager_lambda.lambda_handler",
+        path: "requirement_manager",
+        env: { CLIENTS_TABLE: clientsTableName, DOCUMENTS_TABLE: documentsTableName },
+        targetName: "req-mgr",  // SHORT name (7 chars)
+        specPath: "requirement_manager"
+      },
+      {
+        id: "TaxUpload",
+        handler: "upload_manager_lambda.lambda_handler",
+        path: "upload_manager",
+        env: { CLIENT_BUCKET: clientBucketName, CLIENTS_TABLE: clientsTableName },
+        targetName: "upload",  // SHORT name (6 chars)
+        specPath: "upload_manager"
+      },
+    ];
+
+    const taxLambdaFunctions: { [key: string]: lambda.Function } = {};
+
+    taxLambdas.forEach(tc => {
+      const fn = new lambda.Function(this, tc.id, {
+        runtime: lambda.Runtime.PYTHON_3_13,
+        handler: tc.handler,
+        code: lambda.Code.fromAsset(path.join(__dirname, `../../gateway/tools/${tc.path}`)),
+        timeout: cdk.Duration.seconds(60),
+        memorySize: 512,
+        architecture: lambda.Architecture.ARM_64,
+        environment: tc.env,
+        logGroup: new logs.LogGroup(this, `${tc.id}LogGroup`, {
+          logGroupName: `/aws/lambda/${config.stack_name_base}-${tc.path}`,
+          retention: logs.RetentionDays.ONE_MONTH,
+          removalPolicy: cdk.RemovalPolicy.DESTROY,
+        }),
+      });
+      
+      taxLambdaFunctions[tc.id] = fn;
+    });
 
     // Create comprehensive IAM role for gateway
     const gatewayRole = new iam.Role(this, "GatewayRole", {
@@ -569,8 +645,8 @@ export class BackendStack extends cdk.NestedStack {
       description: "Role for AgentCore Gateway with comprehensive permissions",
     })
 
-    // Lambda invoke permission
-    toolLambda.grantInvoke(gatewayRole)
+    // Lambda invoke permission for tax tools only
+    Object.values(taxLambdaFunctions).forEach(fn => fn.grantInvoke(gatewayRole));
 
     // Bedrock permissions (region-agnostic)
     gatewayRole.addToPolicy(
@@ -646,33 +722,38 @@ export class BackendStack extends cdk.NestedStack {
       description: "AgentCore Gateway with MCP protocol and JWT authentication",
     })
 
-    // Create Gateway Target using L1 construct (CfnGatewayTarget)
-    const gatewayTarget = new bedrockagentcore.CfnGatewayTarget(this, "GatewayTarget", {
-      gatewayIdentifier: gateway.attrGatewayIdentifier,
-      name: "sample-tool-target",
-      description: "Sample tool Lambda target",
-      targetConfiguration: {
-        mcp: {
-          lambda: {
-            lambdaArn: toolLambda.functionArn,
-            toolSchema: {
-              inlinePayload: apiSpec,
+    // Add tax Gateway targets with SHORT names (to stay under 64 char limit)
+    taxLambdas.forEach(toolConfig => {
+      const toolSpec = JSON.parse(
+        require("fs").readFileSync(
+          path.join(__dirname, `../../gateway/tools/${toolConfig.specPath}/tool_spec.json`),
+          "utf8"
+        )
+      );
+
+      const target = new bedrockagentcore.CfnGatewayTarget(this, `${toolConfig.id}Target`, {
+        gatewayIdentifier: gateway.attrGatewayIdentifier,
+        name: toolConfig.targetName,  // SHORT name
+        description: `Tax tool: ${toolSpec.name}`,
+        targetConfiguration: {
+          mcp: {
+            lambda: {
+              lambdaArn: taxLambdaFunctions[toolConfig.id].functionArn,
+              toolSchema: {
+                inlinePayload: [toolSpec],
+              },
             },
           },
         },
-      },
-      credentialProviderConfigurations: [
-        {
-          credentialProviderType: "GATEWAY_IAM_ROLE",
-        },
-      ],
-    })
+        credentialProviderConfigurations: [
+          {
+            credentialProviderType: "GATEWAY_IAM_ROLE",
+          },
+        ],
+      });
 
-    // Ensure proper creation order
-    gatewayTarget.addDependency(gateway)
-    gateway.node.addDependency(toolLambda)
-    gateway.node.addDependency(this.machineClient)
-    gateway.node.addDependency(gatewayRole)
+      target.addDependency(gateway);
+    });
 
     // Store Gateway URL in SSM for runtime access
     new ssm.StringParameter(this, "GatewayUrlParam", {
@@ -697,15 +778,7 @@ export class BackendStack extends cdk.NestedStack {
       description: "AgentCore Gateway ARN",
     })
 
-    new cdk.CfnOutput(this, "GatewayTargetId", {
-      value: gatewayTarget.ref,
-      description: "AgentCore Gateway Target ID",
-    })
-
-    new cdk.CfnOutput(this, "ToolLambdaArn", {
-      description: "ARN of the sample tool Lambda",
-      value: toolLambda.functionArn,
-    })
+    // Output gateway information (sample tool outputs removed)
   }
 
   private createMachineAuthentication(config: AppConfig): void {

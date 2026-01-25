@@ -10,6 +10,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
+from decimal import Decimal
 import boto3
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
@@ -18,6 +19,13 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 dynamodb = boto3.resource('dynamodb')
+
+
+def decimal_default(obj):
+    """Helper function to serialize Decimal objects to JSON."""
+    if isinstance(obj, Decimal):
+        return int(obj) if obj % 1 == 0 else float(obj)
+    raise TypeError
 
 CLIENTS_TABLE = os.environ['CLIENTS_TABLE']
 DOCUMENTS_TABLE = os.environ['DOCUMENTS_TABLE']
@@ -255,7 +263,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return {
             'content': [{
                 'type': 'text',
-                'text': json.dumps(response, indent=2)
+                'text': json.dumps(response, indent=2, default=decimal_default)
             }]
         }
         

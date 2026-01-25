@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Fullstack AgentCore Solution Template",
-  description: "A solution template for building GenAI applications with AgentCore",
+  title: "Agentic Tax Demo",
+  description: "AI-powered tax document collection system",
 }
 
 export default function RootLayout({

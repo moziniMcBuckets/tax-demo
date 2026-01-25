@@ -5,29 +5,28 @@
 /**
  * Tax Agent CDK Entry Point
  * 
- * This is the main entry point for the CDK application.
- * It loads configuration and creates the main stack.
+ * Uses the standard FAST stack with tax agent configuration.
+ * Tax-specific Lambda tools are deployed separately or added to the Gateway incrementally.
  */
 
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
-import { TaxAgentMainStack } from '../lib/tax-agent-main-stack';
+import { FastMainStack } from '../lib/fast-main-stack';
 import { ConfigManager } from '../lib/utils/config-manager';
 
 const app = new cdk.App();
 
 // Load configuration from config.yaml
-const configManager = new ConfigManager();
-const config = configManager.getConfig();
+const configManager = new ConfigManager('config.yaml');
+const config = configManager.getProps();
 
-// Create main stack
-new TaxAgentMainStack(app, `${config.stack_name_base}-main`, {
+// Create main stack using FAST pattern
+new FastMainStack(app, `${config.stack_name_base}-main`, {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
   },
   config: config,
-  description: 'Tax Document Collection Agent - Main Stack',
 });
 
 app.synth();
