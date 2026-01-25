@@ -1,0 +1,43 @@
+# Tax Document Collection Agent Configuration
+
+# Stack name (max 35 characters due to AgentCore naming constraints)
+stack_name_base: tax-agent
+
+# Optional: Auto-create admin user and email credentials
+# If not provided, you'll need to manually create users via AWS Console
+admin_user_email: null  # Example: accountant@example.com
+
+# Backend configuration
+backend:
+  pattern: strands-single-agent  # Agent pattern to deploy
+  deployment_type: docker        # docker (recommended) or zip
+
+# SES Configuration
+# Update with your verified email/domain before deployment
+ses:
+  from_email: noreply@example.com
+  verified_domain: example.com
+
+# Automation Schedule
+automation:
+  daily_check_hour: 9           # Hour to run daily check (24-hour format)
+  daily_check_days: MON-FRI     # Days to run (MON-FRI for weekdays)
+
+# Cost Optimization Settings
+cost_optimization:
+  dynamodb_billing_mode: PROVISIONED  # PROVISIONED (recommended) or ON_DEMAND
+  lambda_architecture: ARM_64         # ARM_64 (recommended) or X86_64
+  log_retention_days: 30              # CloudWatch log retention (1-365 days)
+  s3_intelligent_tiering: true        # Enable S3 intelligent tiering
+
+# Tax Season Settings
+tax_season:
+  start_date: 2025-01-15  # Tax season start
+  end_date: 2025-04-15    # Tax filing deadline
+  memory_expiration_days: 120  # Memory retention (matches season length)
+
+# Follow-up Settings (defaults, can be overridden per accountant)
+followup_defaults:
+  schedule_days: [3, 7, 14]  # Days between reminders
+  escalation_threshold: 3     # Number of reminders before escalation
+  escalation_days: 2          # Days after last reminder before escalation

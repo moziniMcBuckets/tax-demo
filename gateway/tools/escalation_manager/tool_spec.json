@@ -1,0 +1,22 @@
+{
+  "name": "escalate_client",
+  "description": "Mark client for accountant intervention and send notifications. Use when client has not responded after multiple reminders and requires direct contact.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "client_id": {
+        "type": "string",
+        "description": "Unique client identifier to escalate"
+      },
+      "reason": {
+        "type": "string",
+        "description": "Reason for escalation. If not provided, system will generate reason based on follow-up history."
+      },
+      "notify_accountant": {
+        "type": "boolean",
+        "description": "Whether to send notification to accountant (default: true)"
+      }
+    },
+    "required": ["client_id"]
+  }
+}

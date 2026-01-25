@@ -1,0 +1,54 @@
+{
+  "name": "update_document_requirements",
+  "description": "Add, update, or remove required tax documents for a client. Can apply standard requirements or manage custom document lists.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "client_id": {
+        "type": "string",
+        "description": "Unique client identifier"
+      },
+      "tax_year": {
+        "type": "integer",
+        "description": "Tax year (e.g., 2024)"
+      },
+      "operation": {
+        "type": "string",
+        "enum": ["add", "remove", "update", "apply_standard"],
+        "description": "Operation: 'add' new requirements, 'remove' delete, 'update' modify, 'apply_standard' apply template"
+      },
+      "documents": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "document_type": {
+              "type": "string",
+              "description": "Type of document (e.g., 'W-2', '1099-INT')"
+            },
+            "source": {
+              "type": "string",
+              "description": "Source of document (e.g., 'Employer ABC')"
+            },
+            "required": {
+              "type": "boolean",
+              "description": "Whether document is required"
+            },
+            "received": {
+              "type": "boolean",
+              "description": "Whether document has been received (for update)"
+            }
+          },
+          "required": ["document_type"]
+        },
+        "description": "List of documents to add, remove, or update"
+      },
+      "client_type": {
+        "type": "string",
+        "enum": ["individual", "self_employed", "business"],
+        "description": "Client type for apply_standard operation (default: 'individual')"
+      }
+    },
+    "required": ["client_id", "tax_year"]
+  }
+}
