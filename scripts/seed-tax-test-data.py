@@ -277,6 +277,9 @@ def create_document_requirements(dynamodb, s3_client, table_name: str, bucket_na
     """
     Create document requirements for sample clients and upload sample PDFs.
     
+    NOTE: This function is now minimal - it only creates requirements that accountants
+    explicitly add. No predefined requirements are assumed.
+    
     Args:
         dynamodb: DynamoDB resource
         s3_client: S3 client
@@ -285,48 +288,9 @@ def create_document_requirements(dynamodb, s3_client, table_name: str, bucket_na
         client_ids: List of client IDs
         clients_data: List of client data dictionaries
     """
-    table = dynamodb.Table(table_name)
-    
-    # Standard requirements for individual clients
-    standard_docs = [
-        ('W-2', 'All Employers', True),
-        ('1099-INT', 'All Banks', False),
-        ('1099-DIV', 'All Investment Accounts', False),
-        ('Prior Year Tax Return', 'IRS', True),
-    ]
-    
-    for idx, client_id in enumerate(client_ids):
-        client_name = clients_data[idx]['client_name']
-        
-        for doc_type, source, required in standard_docs:
-            # Randomly mark some as received for variety
-            received = (hash(client_id + doc_type) % 3 == 0)
-            
-            try:
-                table.put_item(Item={
-                    'client_id': client_id,
-                    'document_type': doc_type,
-                    'tax_year': 2024,
-                    'source': source,
-                    'required': required,
-                    'received': received,
-                    'created_at': datetime.utcnow().isoformat(),
-                    'last_checked': datetime.utcnow().isoformat(),
-                })
-                
-                # If marked as received, upload a sample PDF to S3
-                if received:
-                    upload_sample_pdf(
-                        s3_client=s3_client,
-                        bucket_name=bucket_name,
-                        client_id=client_id,
-                        client_name=client_name,
-                        document_type=doc_type,
-                        tax_year=2024
-                    )
-                    
-            except ClientError as e:
-                print(f"  ✗ Error creating requirement: {e}")
+    # No predefined requirements - accountants will add them via UI or agent
+    print("  ℹ No predefined requirements - accountants will define per client")
+    print("  ℹ Use the UI or agent to add requirements for each client")
 
 
 def create_followup_history(dynamodb, table_name: str, client_ids: list, accountant_id: str) -> None:

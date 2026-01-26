@@ -197,23 +197,64 @@ def build_client_status(client: Dict[str, Any], settings: Dict[str, Any]) -> Dic
     # Get detailed document list with received status
     table = dynamodb.Table(DOCUMENTS_TABLE)
     try:
-        doc_response = table.query(
-            KeyConditionExpression=Key('client_id').eq(client_id)
-        )
-        required_docs = [
+        logger.info(f"Querying documents table: {DOCUMENTS_TABLE} for client_id: {client_id}")
+        
+        # Query with pagination to ensure we get ALL documents
+        all_items = []
+        last_evaluated_key = None
+        page_count = 0
+        
+        while True:
+            page_count += 1
+            query_params = {
+                'KeyConditionExpression': Key('client_id').eq(client_id),
+                'ConsistentRead': True
+            }
+            
+            if last_evaluated_key:
+                query_params['ExclusiveStartKey'] = last_evaluated_key
+            
+            logger.info(f"Executing query page {page_count} for client {client_id}")
+            doc_response = table.query(**query_params)
+            page_items = doc_response.get('Items', [])
+            logger.info(f"Page {page_count} returned {len(page_items)} items")
+            
+            all_items.extend(page_items)
+            
+            last_evaluated_key = doc_response.get('LastEvaluatedKey')
+            if not last_evaluated_key:
+                break
+        
+        logger.info(f"Documents query for {client_id}: found {len(all_items)} items (with pagination, {page_count} pages)")
+        
+        # Include ALL documents (required and optional/uploaded)
+        all_docs = [
             {
                 'type': d['document_type'],
                 'source': d.get('source', 'Unknown'),
                 'received': d.get('received', False),
+                'required': d.get('required', False),
                 'received_date': d.get('received_date'),
                 'file_path': d.get('file_path')
             }
-            for d in doc_response.get('Items', [])
-            if d.get('required', False)
+            for d in all_items
         ]
+        
+        logger.info(f"Transformed {len(all_docs)} documents for client {client_id}")
+        
+        # Sort: required first, then by received status, then alphabetically
+        all_docs.sort(key=lambda x: (
+            not x['required'],  # Required first
+            not x['received'],  # Received before missing
+            x['type']  # Alphabetical
+        ))
+        
     except ClientError as e:
-        logger.error(f"Error getting required documents: {e}")
-        required_docs = []
+        logger.error(f"Error getting required documents: {e}", exc_info=True)
+        all_docs = []
+    except Exception as e:
+        logger.error(f"Unexpected error getting documents: {e}", exc_info=True)
+        all_docs = []
     
     return {
         'client_id': client_id,
@@ -225,7 +266,7 @@ def build_client_status(client: Dict[str, Any], settings: Dict[str, Any]) -> Dic
         'total_required': doc_status['total_required'],
         'total_received': doc_status['total_received'],
         'missing_documents': doc_status['missing_documents'],
-        'required_documents': required_docs,  # Add detailed document list
+        'required_documents': all_docs,  # Now includes ALL documents
         'followup_count': followup_status['followup_count'],
         'last_followup': followup_status['last_followup'],
         'last_followup_date': followup_status['last_followup_date'],

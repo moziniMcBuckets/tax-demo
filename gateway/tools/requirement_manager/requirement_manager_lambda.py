@@ -169,19 +169,45 @@ def apply_standard_requirements(client_id: str, tax_year: int, client_type: str 
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Lambda handler for managing document requirements."""
+    """Lambda handler for managing document requirements. Supports both Gateway and API Gateway."""
     try:
-        delimiter = "___"
-        original_tool_name = context.client_context.custom['bedrockAgentCoreToolName']
-        tool_name = original_tool_name[original_tool_name.index(delimiter) + len(delimiter):]
+        # Detect event source
+        is_api_gateway = 'httpMethod' in event or 'requestContext' in event
         
-        logger.info(f"Tool invoked: {tool_name}")
+        if is_api_gateway:
+            # API Gateway event (from dashboard UI)
+            logger.info("Processing API Gateway request")
+            body = json.loads(event.get('body', '{}'))
+            
+            client_id = body.get('client_id')
+            tax_year = body.get('tax_year', 2026)  # Updated to 2026
+            operation = body.get('operation', 'add')
+            document_type = body.get('document_type')
+            source = body.get('source', 'Unknown')
+            required = body.get('required', True)
+            
+            # For API Gateway, we handle single document operations
+            if operation == 'add' and document_type:
+                documents = [{'document_type': document_type, 'source': source, 'required': required}]
+            elif operation == 'remove' and document_type:
+                documents = [{'document_type': document_type}]
+            else:
+                documents = body.get('documents', [])
+                
+        else:
+            # AgentCore Gateway tool event
+            logger.info("Processing AgentCore Gateway tool call")
+            delimiter = "___"
+            original_tool_name = context.client_context.custom['bedrockAgentCoreToolName']
+            tool_name = original_tool_name[original_tool_name.index(delimiter) + len(delimiter):]
+            logger.info(f"Tool invoked: {tool_name}")
+            
+            client_id = event.get('client_id')
+            tax_year = event.get('tax_year')
+            operation = event.get('operation', 'add')
+            documents = event.get('documents', [])
+        
         logger.info(f"Event: {json.dumps(event)}")
-        
-        client_id = event.get('client_id')
-        tax_year = event.get('tax_year')
-        operation = event.get('operation', 'add')
-        documents = event.get('documents', [])
         
         if not client_id or not tax_year:
             raise ValueError("Missing required parameters: client_id, tax_year")
@@ -264,10 +290,34 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Processed {results['documents_processed']} documents for client {client_id}")
         
-        return {'content': [{'type': 'text', 'text': json.dumps(results, indent=2)}]}
+        # Return format based on event source
+        if is_api_gateway:
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                },
+                'body': json.dumps(results)
+            }
+        else:
+            return {'content': [{'type': 'text', 'text': json.dumps(results, indent=2)}]}
         
     except Exception as e:
         logger.error(f"Error in lambda_handler: {str(e)}", exc_info=True)
-        return {'content': [{'type': 'text', 'text': json.dumps({
-            'success': False, 'error': str(e), 'error_type': type(e).__name__
-        })}]}
+        
+        if is_api_gateway:
+            return {
+                'statusCode': 500,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                },
+                'body': json.dumps({
+                    'success': False, 'error': str(e), 'error_type': type(e).__name__
+                })
+            }
+        else:
+            return {'content': [{'type': 'text', 'text': json.dumps({
+                'success': False, 'error': str(e), 'error_type': type(e).__name__
+            })}]}

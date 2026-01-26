@@ -43,12 +43,35 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
+  const [bulkOperationInProgress, setBulkOperationInProgress] = useState(false);
+  const [bulkOperationStatus, setBulkOperationStatus] = useState<string>('');
 
   // Fetch clients data
   useEffect(() => {
-    if (auth.isAuthenticated) {
+    if (auth.isAuthenticated && !loading) {
       fetchClients();
     }
+  }, [auth.isAuthenticated]);
+
+  // Refresh when dashboard becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && auth.isAuthenticated) {
+        fetchClients();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Listen for refresh events
+    const handleRefreshEvent = () => fetchClients();
+    window.addEventListener('dashboard-refresh', handleRefreshEvent);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('dashboard-refresh', handleRefreshEvent);
+    };
   }, [auth.isAuthenticated]);
 
   const fetchClients = async () => {
@@ -95,6 +118,164 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
       setError(err instanceof Error ? err.message : 'Failed to load clients');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleClientSelection = (clientId: string) => {
+    setSelectedClients(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(clientId)) {
+        newSet.delete(clientId);
+      } else {
+        newSet.add(clientId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedClients.size === filteredClients.length) {
+      setSelectedClients(new Set());
+    } else {
+      setSelectedClients(new Set(filteredClients.map(c => c.client_id)));
+    }
+  };
+
+  const handleBulkSendReminders = async () => {
+    if (selectedClients.size === 0) {
+      alert('Please select at least one client');
+      return;
+    }
+
+    setBulkOperationInProgress(true);
+    setBulkOperationStatus(`Sending reminders to ${selectedClients.size} clients...`);
+
+    try {
+      const configResponse = await fetch('/aws-exports.json');
+      const config = await configResponse.json();
+      const apiUrl = config.feedbackApiUrl;
+      const idToken = auth.user?.id_token;
+
+      const response = await fetch(`${apiUrl}batch-operations`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          operation: 'send_reminders',
+          client_ids: Array.from(selectedClients),
+          options: {}
+        })
+      });
+
+      const data = await response.json();
+      
+      setBulkOperationInProgress(false);
+      setBulkOperationStatus('');
+      setSelectedClients(new Set());
+      
+      alert(`Reminders sent!\nSuccess: ${data.succeeded}\nFailed: ${data.failed}`);
+      fetchClients();  // Refresh data
+      
+    } catch (err) {
+      setBulkOperationInProgress(false);
+      setBulkOperationStatus('');
+      alert(`Error: ${err instanceof Error ? err.message : 'Failed to send reminders'}`);
+    }
+  };
+
+  const handleBulkSendUploadLinks = async () => {
+    if (selectedClients.size === 0) {
+      alert('Please select at least one client');
+      return;
+    }
+
+    setBulkOperationInProgress(true);
+    setBulkOperationStatus(`Sending upload links to ${selectedClients.size} clients...`);
+
+    try {
+      const configResponse = await fetch('/aws-exports.json');
+      const config = await configResponse.json();
+      const apiUrl = config.feedbackApiUrl;
+      const idToken = auth.user?.id_token;
+
+      const response = await fetch(`${apiUrl}batch-operations`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          operation: 'send_upload_links',
+          client_ids: Array.from(selectedClients),
+          options: { days_valid: 30 }
+        })
+      });
+
+      const data = await response.json();
+      
+      setBulkOperationInProgress(false);
+      setBulkOperationStatus('');
+      setSelectedClients(new Set());
+      
+      alert(`Upload links sent!\nSuccess: ${data.succeeded}\nFailed: ${data.failed}`);
+      fetchClients();
+      
+    } catch (err) {
+      setBulkOperationInProgress(false);
+      setBulkOperationStatus('');
+      alert(`Error: ${err instanceof Error ? err.message : 'Failed to send upload links'}`);
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedClients.size === 0) {
+      alert('Please select at least one client');
+      return;
+    }
+
+    setBulkOperationInProgress(true);
+    setBulkOperationStatus(`Creating ZIP archive for ${selectedClients.size} clients...`);
+
+    try {
+      const configResponse = await fetch('/aws-exports.json');
+      const config = await configResponse.json();
+      const apiUrl = config.feedbackApiUrl;
+      const idToken = auth.user?.id_token;
+
+      const response = await fetch(`${apiUrl}batch-operations`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          operation: 'download_all',
+          client_ids: Array.from(selectedClients),
+          options: {}
+        })
+      });
+
+      const data = await response.json();
+      
+      setBulkOperationInProgress(false);
+      setBulkOperationStatus('');
+      
+      if (data.success && data.download_url) {
+        // Open download URL
+        window.open(data.download_url, '_blank');
+        alert(`ZIP created with ${data.total_files} files!\nDownload started.`);
+      } else {
+        alert(`Error: ${data.error || 'Failed to create ZIP'}`);
+      }
+      
+      setSelectedClients(new Set());
+      
+    } catch (err) {
+      setBulkOperationInProgress(false);
+      setBulkOperationStatus('');
+      alert(`Error: ${err instanceof Error ? err.message : 'Failed to download documents'}`);
     }
   };
 
@@ -166,7 +347,11 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
               <CardTitle>Client Status</CardTitle>
               <CardDescription>Track document collection progress</CardDescription>
             </div>
-            <Button onClick={() => { fetchClients(); onRefresh(); }} variant="outline" size="sm" disabled={loading}>
+            <Button onClick={() => { 
+              setSelectedClients(new Set()); // Clear selections
+              fetchClients(); 
+              onRefresh(); 
+            }} variant="outline" size="sm" disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
@@ -174,36 +359,86 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
         </CardHeader>
         <CardContent>
           {/* Filter buttons */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            <Button
-              variant={filter === 'all' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('all')}
-            >
-              All
-            </Button>
-            <Button
-              variant={filter === 'incomplete' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('incomplete')}
-            >
-              Incomplete
-            </Button>
-            <Button
-              variant={filter === 'at_risk' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('at_risk')}
-            >
-              At Risk
-            </Button>
-            <Button
-              variant={filter === 'escalated' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilter('escalated')}
-            >
-              Escalated
-            </Button>
+          <div className="flex flex-wrap gap-2 mb-4 items-center justify-between">
+            <div className="flex gap-2">
+              <Button
+                variant={filter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilter('all')}
+              >
+                All
+              </Button>
+              <Button
+                variant={filter === 'incomplete' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilter('incomplete')}
+              >
+                Incomplete
+              </Button>
+              <Button
+                variant={filter === 'at_risk' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilter('at_risk')}
+              >
+                At Risk
+              </Button>
+              <Button
+                variant={filter === 'escalated' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilter('escalated')}
+              >
+                Escalated
+              </Button>
+            </div>
+
+            {/* Bulk Actions */}
+            {selectedClients.size > 0 && (
+              <div className="flex gap-2 items-center">
+                <span className="text-sm text-gray-600">
+                  {selectedClients.size} selected
+                </span>
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={handleBulkSendReminders}
+                  disabled={bulkOperationInProgress}
+                >
+                  Send Reminders
+                </Button>
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={handleBulkSendUploadLinks}
+                  disabled={bulkOperationInProgress}
+                >
+                  Send Upload Links
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleBulkDownload}
+                  disabled={bulkOperationInProgress}
+                >
+                  Download All
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedClients(new Set())}
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
           </div>
+
+          {/* Bulk Operation Status */}
+          {bulkOperationStatus && (
+            <div className="mb-4 p-3 bg-blue-50 text-blue-800 rounded-md flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>{bulkOperationStatus}</span>
+            </div>
+          )}
 
           {/* Search */}
           <div className="relative mb-4">
@@ -240,6 +475,14 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
+                  <th className="px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={selectedClients.size === filteredClients.length && filteredClients.length > 0}
+                      onChange={toggleSelectAll}
+                      className="rounded"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Progress</th>
@@ -253,10 +496,21 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
                 {filteredClients.map((client) => (
                   <tr 
                     key={client.client_id}
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => onClientSelect(client.client_id)}
+                    className="hover:bg-gray-50"
                   >
                     <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedClients.has(client.client_id)}
+                        onChange={() => toggleClientSelection(client.client_id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="rounded"
+                      />
+                    </td>
+                    <td 
+                      className="px-4 py-3 cursor-pointer"
+                      onClick={() => onClientSelect(client.client_id)}
+                    >
                       <div className="font-medium text-gray-900">{client.client_name}</div>
                       <div className="text-sm text-gray-500">{client.email}</div>
                     </td>

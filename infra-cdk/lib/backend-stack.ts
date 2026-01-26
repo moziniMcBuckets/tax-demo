@@ -628,6 +628,87 @@ export class BackendStack extends cdk.NestedStack {
     // Grant Lambda permissions to write to DynamoDB
     feedbackTable.grantWriteData(feedbackLambda)
 
+    // Create Batch Operations Lambda
+    const batchOpsLambda = new PythonFunction(this, "BatchOperationsLambda", {
+      functionName: `${config.stack_name_base}-batch-operations`,
+      runtime: lambda.Runtime.PYTHON_3_13,
+      entry: path.join(__dirname, "..", "lambdas", "batch_operations"),
+      handler: "lambda_handler",  // Correct handler name
+      environment: {
+        CLIENTS_TABLE: `${config.stack_name_base}-clients`,
+        DOCUMENTS_TABLE: `${config.stack_name_base}-documents`,
+        FOLLOWUPS_TABLE: `${config.stack_name_base}-followups`,
+        CLIENT_BUCKET: `${config.stack_name_base}-client-docs-${this.account}`,
+        SES_FROM_EMAIL: 'mhamuzn@amazon.com',
+        FRONTEND_URL: frontendUrl,
+        CORS_ALLOWED_ORIGINS: `${frontendUrl},http://localhost:3000`,
+      },
+      timeout: cdk.Duration.minutes(5),  // Longer timeout for batch operations
+      memorySize: 1024,  // More memory for ZIP creation
+      logGroup: new logs.LogGroup(this, "BatchOperationsLogGroup", {
+        logGroupName: `/aws/lambda/${config.stack_name_base}-batch-operations`,
+        retention: logs.RetentionDays.ONE_WEEK,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
+    })
+
+    // Create Client Management Lambda
+    const clientMgmtLambda = new PythonFunction(this, "ClientManagementLambda", {
+      functionName: `${config.stack_name_base}-client-management`,
+      runtime: lambda.Runtime.PYTHON_3_13,
+      entry: path.join(__dirname, "..", "lambdas", "client_management"),
+      handler: "lambda_handler",
+      environment: {
+        CLIENTS_TABLE: `${config.stack_name_base}-clients`,
+        CORS_ALLOWED_ORIGINS: `${frontendUrl},http://localhost:3000`,
+      },
+      timeout: cdk.Duration.seconds(30),
+      logGroup: new logs.LogGroup(this, "ClientManagementLogGroup", {
+        logGroupName: `/aws/lambda/${config.stack_name_base}-client-management`,
+        retention: logs.RetentionDays.ONE_WEEK,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
+    })
+
+    // Grant permissions for client management
+    clientMgmtLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
+        resources: [
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-clients`,
+        ]
+      })
+    );
+
+    // Grant permissions for batch operations
+    batchOpsLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:UpdateItem', 'dynamodb:PutItem'],
+        resources: [
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-clients`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-documents`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-followups`,
+        ]
+      })
+    );
+
+    batchOpsLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject', 's3:PutObject', 's3:ListBucket'],
+        resources: [
+          `arn:aws:s3:::${config.stack_name_base}-client-docs-${this.account}`,
+          `arn:aws:s3:::${config.stack_name_base}-client-docs-${this.account}/*`
+        ]
+      })
+    );
+
+    batchOpsLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+        resources: ['*']
+      })
+    );
+
     /*
      * CORS TODO: Wildcard (*) used because Backend deploys before Frontend in nested stack order.
      * For Lambda proxy integrations, the Lambda's ALLOWED_ORIGINS env var is the primary CORS control.
@@ -646,10 +727,8 @@ export class BackendStack extends cdk.NestedStack {
         stageName: "prod",
         throttlingRateLimit: 100,
         throttlingBurstLimit: 200,
-        cachingEnabled: true,
-        cacheClusterEnabled: true,
-        cacheClusterSize: "0.5",
-        cacheTtl: cdk.Duration.minutes(5),
+        cachingEnabled: false,  // Disable caching for real-time updates
+        cacheClusterEnabled: false,
         loggingLevel: apigateway.MethodLoggingLevel.INFO,
         dataTraceEnabled: true,
         metricsEnabled: true,
@@ -712,12 +791,35 @@ export class BackendStack extends cdk.NestedStack {
       }
     })
 
-    // Create /clients resource and GET method (Cognito auth required)
-    // This endpoint is used by the dashboard to fetch all clients
+    // Create /clients resource
     const clientsResource = api.root.addResource("clients")
     const statusTrackerLambda = this.taxLambdaFunctions['TaxStatus']
     
+    // GET /clients - fetch all clients (dashboard)
     clientsResource.addMethod("GET", new apigateway.LambdaIntegration(statusTrackerLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    })
+
+    // POST /clients - create new client
+    clientsResource.addMethod("POST", new apigateway.LambdaIntegration(clientMgmtLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    })
+
+    // Create /batch-operations resource for bulk actions (Cognito auth required)
+    const batchOpsResource = api.root.addResource("batch-operations")
+    
+    batchOpsResource.addMethod("POST", new apigateway.LambdaIntegration(batchOpsLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    })
+
+    // Create /requirements resource for managing client document requirements
+    const requirementsResource = api.root.addResource("requirements")
+    const requirementManagerLambda = this.taxLambdaFunctions['TaxReqMgr']
+    
+    requirementsResource.addMethod("POST", new apigateway.LambdaIntegration(requirementManagerLambda), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     })

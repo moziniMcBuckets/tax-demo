@@ -5,19 +5,21 @@ import ChatInterface from "@/components/chat/ChatInterface"
 import { ClientDashboard } from "@/components/tax/ClientDashboard"
 import { ClientDetailView } from "@/components/tax/ClientDetailView"
 import { ClientUploadPortal } from "@/components/tax/ClientUploadPortal"
+import { NewClientIntake } from "@/components/tax/NewClientIntake"
 import { DebugPanel } from "@/components/tax/DebugPanel"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
 import { GlobalContextProvider } from "@/app/context/GlobalContext"
-import { MessageSquare, LayoutDashboard, Upload } from "lucide-react"
+import { MessageSquare, LayoutDashboard, Upload, UserPlus } from "lucide-react"
 
-type View = 'chat' | 'dashboard' | 'upload';
+type View = 'chat' | 'dashboard' | 'upload' | 'newClient';
 
 export default function ChatPage() {
   const { isAuthenticated, signIn } = useAuth()
   const [currentView, setCurrentView] = useState<View>('chat')
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
   const [showDetailView, setShowDetailView] = useState(false)
+  const [dashboardKey, setDashboardKey] = useState(0)  // Force dashboard remount
 
   if (!isAuthenticated) {
     return (
@@ -36,15 +38,12 @@ export default function ChatPage() {
   const handleBackToDashboard = () => {
     setShowDetailView(false)
     setSelectedClientId(null)
-    // Force dashboard to refresh when returning
-    setTimeout(() => {
-      window.dispatchEvent(new Event('dashboard-refresh'))
-    }, 100)
+    setDashboardKey(prev => prev + 1)  // Force dashboard to remount and fetch fresh data
   }
 
   const handleRefresh = () => {
-    // Refresh dashboard data
-    window.location.reload()
+    // Trigger dashboard refresh without page reload
+    window.dispatchEvent(new Event('dashboard-refresh'))
   }
 
   return (
@@ -84,6 +83,14 @@ export default function ChatPage() {
             <Upload className="w-4 h-4" />
             Upload Documents
           </Button>
+          <Button
+            variant={currentView === 'newClient' ? 'default' : 'outline'}
+            onClick={() => setCurrentView('newClient')}
+            className="flex items-center gap-2"
+          >
+            <UserPlus className="w-4 h-4" />
+            New Client
+          </Button>
         </div>
 
         {/* Content Area */}
@@ -91,7 +98,7 @@ export default function ChatPage() {
           {currentView === 'chat' && <ChatInterface />}
           {currentView === 'dashboard' && !showDetailView && (
             <ClientDashboard 
-              key="dashboard-list"
+              key={`dashboard-${dashboardKey}-${currentView}`}
               onClientSelect={handleClientSelect}
               onRefresh={handleRefresh}
             />
@@ -102,6 +109,7 @@ export default function ChatPage() {
                 ← Back to Dashboard
               </Button>
               <ClientDetailView 
+                key={`detail-${selectedClientId}`}
                 clientId={selectedClientId}
                 onBack={handleBackToDashboard}
               />
@@ -112,6 +120,14 @@ export default function ChatPage() {
               clientId="test-client-id"
               uploadToken="test-token"
               apiUrl="https://api.example.com"
+            />
+          )}
+          {currentView === 'newClient' && (
+            <NewClientIntake 
+              onClientCreated={() => {
+                setDashboardKey(prev => prev + 1);  // Force dashboard to fetch fresh data
+                setCurrentView('dashboard');
+              }}
             />
           )}
         </div>

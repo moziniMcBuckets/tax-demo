@@ -2,16 +2,47 @@
 
 ## Overview
 
-This document captures all issues encountered during development and their solutions. Each issue includes:
-- Problem description
-- Error messages
-- Root cause analysis
-- Solution
-- Prevention tips
+This document captures common issues and their solutions.
 
 ---
 
-## Issue #1: CDK CfnGatewayTarget inlinePayload Format Error
+## Real-Time Data Issues
+
+### Issue: Requirements or Data Not Showing Immediately
+
+**Symptoms:**
+- Add a requirement → shows briefly → disappears
+- Click Refresh → shows old data
+- DynamoDB has correct data but UI doesn't
+- Data appears after 5+ minutes
+
+**Root Cause:**
+API Gateway response caching was enabled with 5-minute TTL, causing stale data.
+
+**Solution:**
+Disabled caching in CDK:
+```typescript
+cachingEnabled: false,
+cacheClusterEnabled: false,
+```
+
+**Manual Fix (if needed):**
+```bash
+# Flush cache
+aws apigateway flush-stage-cache --rest-api-id ut2nfsf7y6 --stage-name prod
+
+# Or redeploy API
+aws apigateway create-deployment --rest-api-id ut2nfsf7y6 --stage-name prod
+```
+
+**Prevention:**
+For real-time applications, disable API Gateway caching or use very short TTLs (< 30 seconds).
+
+---
+
+## CDK Deployment Issues
+
+### Issue #1: CDK CfnGatewayTarget inlinePayload Format Error
 
 **Date:** January 25, 2026
 **Severity:** High (Blocks deployment)

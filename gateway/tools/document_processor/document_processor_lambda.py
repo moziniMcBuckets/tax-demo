@@ -147,7 +147,7 @@ def send_completion_notification(client_id: str, client_info: Dict[str, Any]) ->
     subject = f"Good News: {client_name} has submitted all documents"
     body = f"""Great news!
 
-Client {client_name} has successfully uploaded all required documents for their 2024 tax return.
+Client {client_name} has successfully uploaded all required documents for their 2026 tax return.
 
 You can now proceed with preparing their return.
 

@@ -19,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from 'react-oidc-context';
+import { AddRequirementDialog } from './AddRequirementDialog';
 import { 
   CheckCircle, 
   XCircle, 
@@ -28,7 +29,8 @@ import {
   ArrowLeft,
   Phone,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  Plus
 } from 'lucide-react';
 
 interface ClientDetailViewProps {
@@ -45,6 +47,8 @@ export function ClientDetailView({
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAddRequirementDialog, setShowAddRequirementDialog] = useState(false);
+  const [operationMessage, setOperationMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   useEffect(() => {
     console.log('ClientDetailView mounted with clientId:', clientId);
@@ -83,6 +87,7 @@ export function ClientDetailView({
       }
       
       const data = await response.json();
+      console.log('Client detail API response:', data);  // Debug
       console.log('Client detail response:', data);  // Debug
       
       if (data.clients && data.clients.length > 0) {
@@ -95,7 +100,10 @@ export function ClientDetailView({
         const docs = clientData.required_documents?.map((doc: any) => ({
           type: doc.type,
           source: doc.source,
-          received: doc.received
+          received: doc.received,
+          required: doc.required,
+          received_date: doc.received_date,
+          file_path: doc.file_path
         })) || [];
         console.log('Transformed documents:', docs);
         setDocuments(docs);
@@ -112,6 +120,7 @@ export function ClientDetailView({
   };
 
   const handleDownloadDocument = async (documentType: string) => {
+    setOperationMessage(null);
     try {
       // Load config
       const configResponse = await fetch('/aws-exports.json');
@@ -122,13 +131,13 @@ export function ClientDetailView({
       const idToken = auth.user?.id_token;
       
       if (!idToken) {
-        alert('Not authenticated');
+        setOperationMessage({type: 'error', text: 'Not authenticated'});
         return;
       }
       
       // Request download URL
       const response = await fetch(
-        `${apiUrl}documents/${clientId}/${encodeURIComponent(documentType)}?tax_year=2024`,
+        `${apiUrl}documents/${clientId}/${encodeURIComponent(documentType)}?tax_year=2026`,
         {
           headers: {
             'Authorization': `Bearer ${idToken}`,
@@ -146,21 +155,154 @@ export function ClientDetailView({
       
       // Open download URL in new tab
       window.open(data.download_url, '_blank');
+      setOperationMessage({type: 'success', text: `Downloading ${documentType}...`});
+      setTimeout(() => setOperationMessage(null), 2000);
       
     } catch (err) {
       console.error('Error downloading document:', err);
-      alert(err instanceof Error ? err.message : 'Failed to download document');
+      setOperationMessage({type: 'error', text: err instanceof Error ? err.message : 'Failed to download document'});
     }
   };
 
   const handleSendReminder = async () => {
-    // TODO: Implement send reminder via API
-    alert('Send reminder functionality - to be implemented');
+    if (!client) return;
+    
+    setOperationMessage(null);
+    try {
+      const configResponse = await fetch('/aws-exports.json');
+      const config = await configResponse.json();
+      const apiUrl = config.feedbackApiUrl;
+      const idToken = auth.user?.id_token;
+
+      const response = await fetch(`${apiUrl}batch-operations`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          operation: 'send_reminders',
+          client_ids: [clientId],
+          options: {}
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.succeeded > 0) {
+        setOperationMessage({
+          type: 'success', 
+          text: `Reminder sent to ${client.client_name} with list of missing documents`
+        });
+        setTimeout(() => setOperationMessage(null), 3000);
+      } else {
+        const errorMsg = data.results?.[0]?.error || 'Failed to send reminder';
+        setOperationMessage({type: 'error', text: errorMsg});
+      }
+    } catch (err) {
+      setOperationMessage({
+        type: 'error', 
+        text: err instanceof Error ? err.message : 'Failed to send reminder'
+      });
+    }
   };
 
   const handleEscalate = async () => {
-    // TODO: Implement escalate via API
-    alert('Escalate functionality - to be implemented');
+    // TODO: Implement escalate via batch operations or direct API
+    setOperationMessage({type: 'success', text: 'Escalate functionality - coming soon'});
+    setTimeout(() => setOperationMessage(null), 2000);
+  };
+
+  const handleAddRequirement = async (documentType: string, source: string) => {
+    setOperationMessage(null);
+    
+    // Optimistic update - add to UI immediately
+    const newDoc: Document = {
+      type: documentType,
+      source: source,
+      received: false,
+      required: true
+    };
+    setDocuments(prev => [...prev, newDoc]);
+    
+    try {
+      const configResponse = await fetch('/aws-exports.json');
+      const config = await configResponse.json();
+      const apiUrl = config.feedbackApiUrl;
+      const idToken = auth.user?.id_token;
+
+      const response = await fetch(`${apiUrl}requirements`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          client_id: clientId,
+          tax_year: 2026,
+          operation: 'add',
+          document_type: documentType,
+          source: source,
+          required: true
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setOperationMessage({type: 'success', text: `Added "${documentType}" to requirements`});
+        setTimeout(() => setOperationMessage(null), 3000);
+        // Don't fetch - keep optimistic update only
+        // Data will refresh when user navigates away and back
+        window.dispatchEvent(new Event('dashboard-refresh'));
+      } else {
+        // Revert optimistic update on error
+        setDocuments(prev => prev.filter(d => d.type !== documentType));
+        setOperationMessage({type: 'error', text: data.error || 'Failed to add requirement'});
+      }
+    } catch (err) {
+      // Revert optimistic update on error
+      setDocuments(prev => prev.filter(d => d.type !== documentType));
+      setOperationMessage({type: 'error', text: err instanceof Error ? err.message : 'Failed to add requirement'});
+    }
+  };
+
+  const handleRemoveRequirement = async (documentType: string) => {
+    setOperationMessage(null);
+    try {
+      const configResponse = await fetch('/aws-exports.json');
+      const config = await configResponse.json();
+      const apiUrl = config.feedbackApiUrl;
+      const idToken = auth.user?.id_token;
+
+      const response = await fetch(`${apiUrl}requirements`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          client_id: clientId,
+          tax_year: 2026,
+          operation: 'remove',
+          document_type: documentType
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setOperationMessage({type: 'success', text: `Removed "${documentType}" from requirements`});
+        setTimeout(() => setOperationMessage(null), 3000);
+        fetchClientDetails();
+        // Trigger dashboard refresh
+        window.dispatchEvent(new Event('dashboard-refresh'));
+      } else {
+        setOperationMessage({type: 'error', text: data.error || 'Failed to remove requirement'});
+      }
+    } catch (err) {
+      setOperationMessage({type: 'error', text: err instanceof Error ? err.message : 'Failed to remove requirement'});
+    }
   };
 
   if (loading) {
@@ -188,8 +330,31 @@ export function ClientDetailView({
     );
   }
 
+  // Debug: Log documents state at render time
+  console.log('Rendering with documents state:', documents.length, documents);
+
   return (
     <div className="space-y-6 p-6">
+      {/* Operation Message */}
+      {operationMessage && (
+        <div className={`p-4 rounded-lg border ${
+          operationMessage.type === 'success' 
+            ? 'bg-green-50 border-green-200' 
+            : 'bg-red-50 border-red-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            {operationMessage.type === 'success' ? (
+              <CheckCircle className="w-5 h-5 text-green-600" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-red-600" />
+            )}
+            <span className={operationMessage.type === 'success' ? 'text-green-900' : 'text-red-900'}>
+              {operationMessage.text}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -203,6 +368,15 @@ export function ClientDetailView({
           </div>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant="outline"
+            size="sm"
+            onClick={fetchClientDetails}
+            disabled={loading}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
           <Button 
             variant="outline" 
             onClick={handleSendReminder}
@@ -282,44 +456,85 @@ export function ClientDetailView({
       {/* Document Checklist */}
       <Card>
         <CardHeader>
-          <CardTitle>Document Checklist</CardTitle>
-          <CardDescription>Required documents for 2024 tax return</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Documents</CardTitle>
+              <CardDescription>Uploaded documents and requirements for 2026 tax return</CardDescription>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowAddRequirementDialog(true)}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add Requirement
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            {documents.map((doc, index) => (
-              <div 
-                key={index}
-                className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
-              >
-                <div className="flex items-center gap-3">
-                  {doc.received ? (
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                  ) : (
-                    <XCircle className="w-5 h-5 text-red-500" />
-                  )}
-                  <div>
-                    <div className="font-medium">{doc.type}</div>
-                    <div className="text-sm text-gray-500">{doc.source}</div>
+          {documents.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No documents or requirements yet</p>
+              <p className="text-sm mt-2">Click "Add Requirement" to specify what this client needs</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {documents.map((doc, index) => (
+                <div 
+                  key={index}
+                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                >
+                  <div className="flex items-center gap-3">
+                    {doc.received ? (
+                      <CheckCircle className="w-5 h-5 text-green-500" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-red-500" />
+                    )}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{doc.type}</span>
+                        {doc.required && (
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                            Required
+                          </span>
+                        )}
+                      </div>
+                      {doc.received && doc.received_date && (
+                        <div className="text-xs text-gray-500">
+                          Uploaded: {new Date(doc.received_date).toLocaleDateString()}
+                        </div>
+                      )}
+                      {!doc.received && doc.source && (
+                        <div className="text-xs text-gray-500">
+                          Source: {doc.source}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {doc.received ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDownloadDocument(doc.type)}
+                      >
+                        Download
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleRemoveRequirement(doc.type)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </Button>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-500">
-                    {doc.received ? 'Received' : 'Missing'}
-                  </span>
-                  {doc.received && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleDownloadDocument(doc.type)}
-                    >
-                      Download
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -363,6 +578,14 @@ export function ClientDetailView({
           </div>
         </CardContent>
       </Card>
+
+      {/* Add Requirement Dialog */}
+      <AddRequirementDialog
+        open={showAddRequirementDialog}
+        onClose={() => setShowAddRequirementDialog(false)}
+        onAdd={handleAddRequirement}
+        clientName={client?.client_name || ''}
+      />
     </div>
   );
 }

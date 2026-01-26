@@ -43,7 +43,9 @@ export interface Document {
   type: string;
   source: string;
   received: boolean;
-  last_checked: string;
+  required?: boolean;
+  received_date?: string;
+  file_path?: string;
 }
 
 export interface DocumentCheckResponse {

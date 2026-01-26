@@ -88,7 +88,7 @@ export function ClientUploadPortal({ clientId, uploadToken, apiUrl }: ClientUplo
           client_id: clientId,
           upload_token: uploadToken,
           filename: file.name,
-          tax_year: 2024,
+          tax_year: 2026,
           document_type: documentType,
         }),
       });
@@ -140,7 +140,7 @@ export function ClientUploadPortal({ clientId, uploadToken, apiUrl }: ClientUplo
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Upload Tax Documents</h1>
           <p className="text-gray-600 mt-2">
-            Securely upload your tax documents for 2024
+            Securely upload your tax documents for 2026
           </p>
         </div>
 
