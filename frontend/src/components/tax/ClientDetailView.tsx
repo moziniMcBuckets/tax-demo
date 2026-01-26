@@ -75,7 +75,7 @@ export function ClientDetailView({
       }
       
       // Fetch client details from API
-      const response = await fetch(`${apiUrl}clients?accountant_id=acc_test_001&client_id=${clientId}`, {
+      const response = await fetch(`${apiUrl}clients?client_id=${clientId}`, {
         headers: {
           'Authorization': `Bearer ${idToken}`,
           'Content-Type': 'application/json'

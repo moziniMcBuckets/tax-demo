@@ -7,6 +7,7 @@ import { ClientDetailView } from "@/components/tax/ClientDetailView"
 import { ClientUploadPortal } from "@/components/tax/ClientUploadPortal"
 import { NewClientIntake } from "@/components/tax/NewClientIntake"
 import { DebugPanel } from "@/components/tax/DebugPanel"
+import { AuthForms } from "@/components/auth/AuthForms"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
 import { GlobalContextProvider } from "@/app/context/GlobalContext"
@@ -22,12 +23,7 @@ export default function ChatPage() {
   const [dashboardKey, setDashboardKey] = useState(0)  // Force dashboard remount
 
   if (!isAuthenticated) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <p className="text-4xl">Please sign in</p>
-        <Button onClick={() => signIn()}>Sign In</Button>
-      </div>
-    )
+    return <AuthForms />
   }
 
   const handleClientSelect = (clientId: string) => {

@@ -93,9 +93,8 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
       
       // Fetch ALL clients from API (explicitly no client_id parameter)
       const url = new URL(`${apiUrl}clients`);
-      url.searchParams.set('accountant_id', 'acc_test_001');
+      // Don't hardcode accountant_id - let backend extract from JWT
       url.searchParams.set('filter', 'all');
-      // Explicitly do NOT set client_id
       
       const response = await fetch(url.toString(), {
         headers: {

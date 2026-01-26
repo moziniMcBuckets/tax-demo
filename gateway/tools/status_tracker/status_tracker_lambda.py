@@ -286,17 +286,21 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # API Gateway event (from dashboard)
             logger.info("Processing API Gateway request")
             
-            # Extract accountant_id from query parameters or JWT claims
+            # Extract accountant_id from JWT claims (Cognito sub)
             query_params = event.get('queryStringParameters') or {}
-            accountant_id = query_params.get('accountant_id')
             
-            # If not in query params, try to get from JWT claims
+            # Get accountant_id from JWT token (not query params)
+            request_context = event.get('requestContext', {})
+            authorizer = request_context.get('authorizer', {})
+            claims = authorizer.get('claims', {})
+            
+            # Use Cognito sub as accountant_id
+            accountant_id = claims.get('sub')
+            
             if not accountant_id:
-                request_context = event.get('requestContext', {})
-                authorizer = request_context.get('authorizer', {})
-                claims = authorizer.get('claims', {})
-                # Use sub (user ID) as accountant_id if not provided
-                accountant_id = claims.get('sub', 'acc_test_001')  # Default for testing
+                raise ValueError("Unable to determine accountant ID from authentication token")
+            
+            logger.info(f"Extracted accountant_id from JWT: {accountant_id}")
             
             client_id = query_params.get('client_id') or 'all'  # Ensure we get 'all' if None
             status_filter = query_params.get('filter') or 'all'

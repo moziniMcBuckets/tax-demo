@@ -59,9 +59,10 @@ def create_client(client_data: Dict[str, Any]) -> Dict[str, Any]:
         'phone': client_data.get('phone', ''),
         'client_type': client_data.get('client_type', 'individual'),
         'notes': client_data.get('notes', ''),
-        'accountant_id': client_data.get('accountant_id', 'acc_test_001'),
-        'accountant_name': client_data.get('accountant_name', 'Sarah Johnson'),
-        'accountant_firm': client_data.get('accountant_firm', 'Johnson Tax Services'),
+        'accountant_id': client_data['accountant_id'],  # From JWT
+        'accountant_email': client_data.get('accountant_email', ''),
+        'accountant_name': client_data.get('accountant_name', ''),
+        'accountant_firm': client_data.get('accountant_firm', ''),
         'accountant_phone': client_data.get('accountant_phone', ''),
         'tax_year': 2026,  # Updated to 2026
         'status': 'incomplete',
@@ -95,6 +96,28 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         http_method = event.get('httpMethod')
         body = json.loads(event.get('body', '{}'))
         
+        # Extract accountant_id from JWT token
+        request_context = event.get('requestContext', {})
+        authorizer = request_context.get('authorizer', {})
+        claims = authorizer.get('claims', {})
+        accountant_id = claims.get('sub')
+        accountant_email = claims.get('email', '')
+        
+        if not accountant_id:
+            return {
+                'statusCode': 401,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                },
+                'body': json.dumps({
+                    'success': False,
+                    'error': 'Unable to determine accountant ID from authentication'
+                })
+            }
+        
+        logger.info(f"Accountant ID from JWT: {accountant_id}")
+        
         if http_method == 'POST':
             # Create new client
             required_fields = ['client_name', 'email']
@@ -112,6 +135,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         'error': f'Missing required fields: {", ".join(missing)}'
                     })
                 }
+            
+            # Add accountant_id from JWT to client data
+            body['accountant_id'] = accountant_id
+            body['accountant_email'] = accountant_email
             
             client = create_client(body)
             

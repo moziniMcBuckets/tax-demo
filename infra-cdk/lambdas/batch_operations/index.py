@@ -348,6 +348,26 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         logger.info(f"Batch operation request: {json.dumps(event)}")
         
+        # Extract accountant_id from JWT token
+        request_context = event.get('requestContext', {})
+        authorizer = request_context.get('authorizer', {})
+        claims = authorizer.get('claims', {})
+        accountant_id = claims.get('sub')
+        
+        if not accountant_id:
+            return {
+                'statusCode': 401,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                },
+                'body': json.dumps({
+                    'error': 'Unable to determine accountant ID from authentication'
+                })
+            }
+        
+        logger.info(f"Accountant ID from JWT: {accountant_id}")
+        
         # Parse request
         body = json.loads(event.get('body', '{}'))
         operation = body.get('operation')

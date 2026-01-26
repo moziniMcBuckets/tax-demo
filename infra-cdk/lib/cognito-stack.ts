@@ -26,7 +26,7 @@ export class CognitoStack extends cdk.NestedStack {
 
     const userPool = new cognito.UserPool(this, "UserPool", {
       userPoolName: `${config.stack_name_base}-user-pool`,
-      selfSignUpEnabled: false,
+      selfSignUpEnabled: true,  // Enable self-service sign-up
       signInAliases: {
         email: true,
       },
