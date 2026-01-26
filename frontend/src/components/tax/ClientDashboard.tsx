@@ -20,6 +20,7 @@ import { Client, ClientSummary, ClientStatus } from '@/types/tax/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAuth } from 'react-oidc-context';
 import { 
   AlertCircle, 
   CheckCircle, 
@@ -35,11 +36,61 @@ interface ClientDashboardProps {
 }
 
 export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardProps) {
+  const auth = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [summary, setSummary] = useState<ClientSummary | null>(null);
   const [filter, setFilter] = useState<ClientStatus | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch clients data
+  useEffect(() => {
+    if (auth.isAuthenticated) {
+      fetchClients();
+    }
+  }, [auth.isAuthenticated]);
+
+  const fetchClients = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Load config
+      const configResponse = await fetch('/aws-exports.json');
+      const config = await configResponse.json();
+      const apiUrl = config.feedbackApiUrl;
+      
+      // Get ID token from react-oidc-context
+      const idToken = auth.user?.id_token;
+      
+      if (!idToken) {
+        throw new Error('Not authenticated');
+      }
+      
+      // Fetch clients from API
+      const response = await fetch(`${apiUrl}clients?accountant_id=acc_test_001`, {
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch clients: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      setClients(data.clients || []);
+      setSummary(data.summary || null);
+      
+    } catch (err) {
+      console.error('Error fetching clients:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load clients');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Status badge styling
   const getStatusBadge = (status: ClientStatus) => {
@@ -109,8 +160,8 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
               <CardTitle>Client Status</CardTitle>
               <CardDescription>Track document collection progress</CardDescription>
             </div>
-            <Button onClick={onRefresh} variant="outline" size="sm">
-              <RefreshCw className="w-4 h-4 mr-2" />
+            <Button onClick={() => { fetchClients(); onRefresh(); }} variant="outline" size="sm" disabled={loading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
@@ -161,7 +212,25 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
           </div>
 
           {/* Client Table */}
-          <div className="overflow-x-auto">
+          {loading && (
+            <div className="text-center py-8">
+              <RefreshCw className="w-8 h-8 animate-spin mx-auto text-gray-400 mb-2" />
+              <p className="text-gray-500">Loading clients...</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="text-center py-8">
+              <AlertCircle className="w-8 h-8 mx-auto text-red-500 mb-2" />
+              <p className="text-red-600">{error}</p>
+              <Button onClick={fetchClients} variant="outline" size="sm" className="mt-4">
+                Try Again
+              </Button>
+            </div>
+          )}
+
+          {!loading && !error && (
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
@@ -237,12 +306,13 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
               </tbody>
             </table>
 
-            {filteredClients.length === 0 && (
+            {filteredClients.length === 0 && !loading && !error && (
               <div className="text-center py-8 text-gray-500">
                 No clients found matching your criteria
               </div>
             )}
           </div>
+          )}
         </CardContent>
       </Card>
     </div>

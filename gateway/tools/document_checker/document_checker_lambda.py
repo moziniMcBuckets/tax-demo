@@ -73,7 +73,34 @@ def scan_client_folder(client_id: str, tax_year: int) -> List[Dict[str, Any]]:
     Returns:
         List of document dictionaries with metadata
     """
-    prefix = f"{client_id}/{tax_year}/"
+    # Get client name to construct folder path
+    clients_table = dynamodb.Table(CLIENTS_TABLE)
+    try:
+        client_response = clients_table.get_item(Key={'client_id': client_id})
+        if 'Item' not in client_response:
+            logger.error(f"Client not found: {client_id}")
+            return []
+        
+        client_name = client_response['Item'].get('client_name', '')
+        
+        # Create folder name: lastName_FirstName_TaxYear
+        name_parts = client_name.strip().split()
+        if len(name_parts) >= 2:
+            first_name = '_'.join(name_parts[:-1])
+            last_name = name_parts[-1]
+            folder_name = f"{last_name}_{first_name}_{tax_year}"
+        else:
+            folder_name = f"{client_name.replace(' ', '_')}_{tax_year}"
+        
+        # Remove special characters
+        folder_name = ''.join(c for c in folder_name if c.isalnum() or c in '_-')
+        prefix = f"{folder_name}/"
+        
+    except ClientError as e:
+        logger.error(f"Error getting client info: {e}")
+        # Fallback to old format
+        prefix = f"{client_id}/{tax_year}/"
+    
     documents = []
     
     try:
@@ -84,7 +111,7 @@ def scan_client_folder(client_id: str, tax_year: int) -> List[Dict[str, Any]]:
         )
         
         if 'Contents' not in response:
-            logger.info(f"No documents found for client {client_id}, year {tax_year}")
+            logger.info(f"No documents found for client {client_id} at prefix {prefix}")
             return documents
         
         # Process each document
@@ -110,7 +137,7 @@ def scan_client_folder(client_id: str, tax_year: int) -> List[Dict[str, Any]]:
                 's3_key': key,
             })
         
-        logger.info(f"Found {len(documents)} documents for client {client_id}")
+        logger.info(f"Found {len(documents)} documents for client {client_id} at {prefix}")
         return documents
         
     except ClientError as e:

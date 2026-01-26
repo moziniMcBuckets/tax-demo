@@ -16,6 +16,7 @@ export default function ChatPage() {
   const { isAuthenticated, signIn } = useAuth()
   const [currentView, setCurrentView] = useState<View>('chat')
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+  const [showDetailView, setShowDetailView] = useState(false)
 
   if (!isAuthenticated) {
     return (
@@ -28,7 +29,12 @@ export default function ChatPage() {
 
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId)
-    // Could navigate to detail view here
+    setShowDetailView(true)
+  }
+
+  const handleBackToDashboard = () => {
+    setShowDetailView(false)
+    setSelectedClientId(null)
   }
 
   const handleRefresh = () => {
@@ -70,11 +76,22 @@ export default function ChatPage() {
         {/* Content Area */}
         <div className="flex-1 overflow-auto">
           {currentView === 'chat' && <ChatInterface />}
-          {currentView === 'dashboard' && (
+          {currentView === 'dashboard' && !showDetailView && (
             <ClientDashboard 
               onClientSelect={handleClientSelect}
               onRefresh={handleRefresh}
             />
+          )}
+          {currentView === 'dashboard' && showDetailView && selectedClientId && (
+            <div className="p-6">
+              <Button onClick={handleBackToDashboard} variant="outline" className="mb-4">
+                ← Back to Dashboard
+              </Button>
+              <ClientDetailView 
+                clientId={selectedClientId}
+                onBack={handleBackToDashboard}
+              />
+            </div>
           )}
           {currentView === 'upload' && (
             <ClientUploadPortal

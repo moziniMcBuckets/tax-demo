@@ -56,11 +56,16 @@ def get_client_documents(client_id: str) -> Dict[str, Any]:
         )
         documents = response.get('Items', [])
         required_docs = [d for d in documents if d.get('required', False)]
-        received_docs = [d for d in documents if d.get('received', False)]
+        
+        # Count only REQUIRED documents that are received
+        received_required_docs = [d for d in required_docs if d.get('received', False)]
         
         total_required = len(required_docs)
-        total_received = len(received_docs)
+        total_received = len(received_required_docs)
         completion_pct = int((total_received / total_required) * 100) if total_required > 0 else 0
+        
+        # Cap at 100% to prevent display issues
+        completion_pct = min(completion_pct, 100)
         
         missing_docs = [d['document_type'] for d in required_docs if not d.get('received', False)]
         
@@ -208,18 +213,43 @@ def build_client_status(client: Dict[str, Any], settings: Dict[str, Any]) -> Dic
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Lambda handler for getting client status."""
+    """Lambda handler for getting client status. Supports both Gateway tool calls and API Gateway requests."""
     try:
-        delimiter = "___"
-        original_tool_name = context.client_context.custom['bedrockAgentCoreToolName']
-        tool_name = original_tool_name[original_tool_name.index(delimiter) + len(delimiter):]
+        # Detect event source: API Gateway vs AgentCore Gateway
+        is_api_gateway = 'httpMethod' in event or 'requestContext' in event
         
-        logger.info(f"Tool invoked: {tool_name}")
+        if is_api_gateway:
+            # API Gateway event (from dashboard)
+            logger.info("Processing API Gateway request")
+            
+            # Extract accountant_id from query parameters or JWT claims
+            query_params = event.get('queryStringParameters') or {}
+            accountant_id = query_params.get('accountant_id')
+            
+            # If not in query params, try to get from JWT claims
+            if not accountant_id:
+                request_context = event.get('requestContext', {})
+                authorizer = request_context.get('authorizer', {})
+                claims = authorizer.get('claims', {})
+                # Use sub (user ID) as accountant_id if not provided
+                accountant_id = claims.get('sub', 'acc_test_001')  # Default for testing
+            
+            client_id = query_params.get('client_id', 'all')
+            status_filter = query_params.get('filter', 'all')
+            
+        else:
+            # AgentCore Gateway tool event
+            logger.info("Processing AgentCore Gateway tool call")
+            delimiter = "___"
+            original_tool_name = context.client_context.custom['bedrockAgentCoreToolName']
+            tool_name = original_tool_name[original_tool_name.index(delimiter) + len(delimiter):]
+            logger.info(f"Tool invoked: {tool_name}")
+            
+            accountant_id = event.get('accountant_id')
+            client_id = event.get('client_id', 'all')
+            status_filter = event.get('filter', 'all')
+        
         logger.info(f"Event: {json.dumps(event)}")
-        
-        accountant_id = event.get('accountant_id')
-        client_id = event.get('client_id', 'all')
-        status_filter = event.get('filter', 'all')
         
         if not accountant_id:
             raise ValueError("Missing required parameter: accountant_id")
@@ -252,7 +282,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         priority_order = {'escalated': 0, 'at_risk': 1, 'incomplete': 2, 'complete': 3}
         client_statuses.sort(key=lambda x: priority_order.get(x['status'], 4))
         
-        response = {
+        response_data = {
             'summary': summary,
             'clients': client_statuses,
             'generated_at': datetime.utcnow().isoformat()
@@ -260,21 +290,46 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Status retrieved for {len(client_statuses)} clients")
         
-        return {
-            'content': [{
-                'type': 'text',
-                'text': json.dumps(response, indent=2, default=decimal_default)
-            }]
-        }
+        # Return format depends on event source
+        if is_api_gateway:
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                },
+                'body': json.dumps(response_data, default=decimal_default)
+            }
+        else:
+            return {
+                'content': [{
+                    'type': 'text',
+                    'text': json.dumps(response_data, indent=2, default=decimal_default)
+                }]
+            }
         
     except Exception as e:
         logger.error(f"Error in lambda_handler: {str(e)}", exc_info=True)
-        return {
-            'content': [{
-                'type': 'text',
-                'text': json.dumps({
+        
+        if is_api_gateway:
+            return {
+                'statusCode': 500,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                },
+                'body': json.dumps({
                     'error': str(e),
                     'error_type': type(e).__name__
                 })
-            }]
-        }
+            }
+        else:
+            return {
+                'content': [{
+                    'type': 'text',
+                    'text': json.dumps({
+                        'error': str(e),
+                        'error_type': type(e).__name__
+                    })
+                }]
+            }

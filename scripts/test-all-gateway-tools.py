@@ -147,7 +147,7 @@ def main():
         "Document Checker",
         gateway_url,
         access_token,
-        'document-checker-target___check_client_documents',
+        'doc-check___check_client_documents',
         {'client_id': test_client_id, 'tax_year': 2024}
     ))
     
@@ -156,7 +156,7 @@ def main():
         "Status Tracker",
         gateway_url,
         access_token,
-        'status-tracker-target___get_client_status',
+        'status___get_client_status',
         {'accountant_id': 'acc_test_001', 'filter': 'all'}
     ))
     
@@ -165,7 +165,7 @@ def main():
         "Requirement Manager",
         gateway_url,
         access_token,
-        'requirement-manager-target___update_document_requirements',
+        'req-mgr___update_document_requirements',
         {
             'client_id': test_client_id,
             'tax_year': 2024,
@@ -179,7 +179,7 @@ def main():
         "Email Sender",
         gateway_url,
         access_token,
-        'email-sender-target___send_followup_email',
+        'email___send_followup_email',
         {
             'client_id': test_client_id,
             'missing_documents': ['W-2', '1099-INT'],
@@ -193,7 +193,7 @@ def main():
         "Escalation Manager",
         gateway_url,
         access_token,
-        'escalation-manager-target___escalate_client',
+        'escalate___escalate_client',
         {
             'client_id': test_client_id,
             'reason': 'Test escalation - no action needed',

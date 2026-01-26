@@ -39,6 +39,7 @@ export class BackendStack extends cdk.NestedStack {
   private userPool: cognito.IUserPool
   private machineClient: cognito.UserPoolClient
   private agentRuntime: agentcore.Runtime
+  private taxLambdaFunctions: { [key: string]: lambda.Function } = {}
 
   constructor(scope: Construct, id: string, props: BackendStackProps) {
     super(scope, id, props)
@@ -75,7 +76,10 @@ export class BackendStack extends cdk.NestedStack {
     // since it doesn't directly depend on the gateway.
 
     // Create AgentCore Gateway (before Runtime)
-    this.createAgentCoreGateway(props.config)
+    this.createAgentCoreGateway(props.config, props.frontendUrl)
+
+    // Configure S3 CORS for client documents bucket
+    this.configureClientDocumentsBucket(props.config, props.frontendUrl)
 
     // Create AgentCore Runtime resources
     this.createAgentCoreRuntime(props.config)
@@ -387,6 +391,152 @@ export class BackendStack extends cdk.NestedStack {
     })
   }
 
+  // Configure CORS for existing client documents S3 bucket
+  private configureClientDocumentsBucket(config: AppConfig, frontendUrl: string): void {
+    const bucketName = `${config.stack_name_base}-client-docs-${this.account}`;
+    const documentsTableName = `${config.stack_name_base}-documents`;
+    
+    // Import existing bucket
+    const clientBucket = s3.Bucket.fromBucketName(
+      this,
+      "ClientDocumentsBucket",
+      bucketName
+    );
+    
+    // Add CORS configuration using custom resource
+    const corsConfig = {
+      CORSRules: [
+        {
+          AllowedHeaders: ['*'],
+          AllowedMethods: ['GET', 'PUT', 'POST', 'HEAD'],
+          AllowedOrigins: [
+            frontendUrl,
+            'http://localhost:3000',
+            'https://*.amplifyapp.com'
+          ],
+          ExposeHeaders: ['ETag'],
+          MaxAgeSeconds: 3000
+        }
+      ]
+    };
+    
+    new cr.AwsCustomResource(this, 'ClientBucketCorsConfig', {
+      onCreate: {
+        service: 'S3',
+        action: 'putBucketCors',
+        parameters: {
+          Bucket: bucketName,
+          CORSConfiguration: corsConfig
+        },
+        physicalResourceId: cr.PhysicalResourceId.of(`${bucketName}-cors`)
+      },
+      onUpdate: {
+        service: 'S3',
+        action: 'putBucketCors',
+        parameters: {
+          Bucket: bucketName,
+          CORSConfiguration: corsConfig
+        },
+        physicalResourceId: cr.PhysicalResourceId.of(`${bucketName}-cors`)
+      },
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ['s3:PutBucketCors', 's3:GetBucketCors'],
+          resources: [`arn:aws:s3:::${bucketName}`]
+        })
+      ])
+    });
+    
+    // Create Document Processor Lambda (triggered by S3 events)
+    const docProcessorLambda = new lambda.Function(this, 'DocumentProcessor', {
+      functionName: `${config.stack_name_base}-document-processor`,
+      runtime: lambda.Runtime.PYTHON_3_13,
+      architecture: lambda.Architecture.ARM_64,
+      handler: 'document_processor_lambda.lambda_handler',
+      code: lambda.Code.fromAsset(
+        path.join(__dirname, '../../gateway/tools/document_processor')
+      ),
+      environment: {
+        DOCUMENTS_TABLE: documentsTableName,
+        CLIENTS_TABLE: `${config.stack_name_base}-clients`,
+        SES_FROM_EMAIL: `mhamuzn@amazon.com`,  // Use verified email
+      },
+      timeout: cdk.Duration.seconds(60),
+      memorySize: 512,
+      logGroup: new logs.LogGroup(this, 'DocumentProcessorLogGroup', {
+        logGroupName: `/aws/lambda/${config.stack_name_base}-document-processor`,
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
+    });
+    
+    // Grant permissions
+    docProcessorLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:Query'
+        ],
+        resources: [
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${documentsTableName}`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-clients`,
+        ]
+      })
+    );
+    
+    docProcessorLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject', 's3:GetObjectAttributes', 's3:ListBucket'],
+        resources: [
+          `arn:aws:s3:::${bucketName}/*`,
+          `arn:aws:s3:::${bucketName}`
+        ]
+      })
+    );
+    
+    // Add S3 event notification using custom resource
+    new cr.AwsCustomResource(this, 'S3EventNotification', {
+      onCreate: {
+        service: 'S3',
+        action: 'putBucketNotificationConfiguration',
+        parameters: {
+          Bucket: bucketName,
+          NotificationConfiguration: {
+            LambdaFunctionConfigurations: [
+              {
+                LambdaFunctionArn: docProcessorLambda.functionArn,
+                Events: ['s3:ObjectCreated:*'],
+                Filter: {
+                  Key: {
+                    FilterRules: [
+                      { Name: 'suffix', Value: '.pdf' }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        physicalResourceId: cr.PhysicalResourceId.of(`${bucketName}-notification`)
+      },
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ['s3:PutBucketNotification', 's3:GetBucketNotification'],
+          resources: [`arn:aws:s3:::${bucketName}`]
+        })
+      ])
+    });
+    
+    // Grant S3 permission to invoke Lambda
+    docProcessorLambda.addPermission('S3InvokePermission', {
+      principal: new iam.ServicePrincipal('s3.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+      sourceArn: `arn:aws:s3:::${bucketName}`,
+    });
+  }
+
   // Creates a DynamoDB table for storing user feedback.
   private createFeedbackTable(config: AppConfig): dynamodb.Table {
     const feedbackTable = new dynamodb.Table(this, "FeedbackTable", {
@@ -489,7 +639,7 @@ export class BackendStack extends cdk.NestedStack {
       description: "API for user feedback and future endpoints",
       defaultCorsPreflightOptions: {
         allowOrigins: [frontendUrl, "http://localhost:3000"],
-        allowMethods: ["POST", "OPTIONS"],
+        allowMethods: ["GET", "POST", "OPTIONS"],
         allowHeaders: ["Content-Type", "Authorization"],
       },
       deployOptions: {
@@ -538,6 +688,25 @@ export class BackendStack extends cdk.NestedStack {
       requestValidator: requestValidator,
     })
 
+    // Create /upload-url resource and POST method (no auth - token-based in Lambda)
+    // This endpoint is used by the client upload portal to get S3 presigned URLs
+    const uploadUrlResource = api.root.addResource("upload-url")
+    const uploadManagerLambda = this.taxLambdaFunctions['TaxUpload']
+    
+    uploadUrlResource.addMethod("POST", new apigateway.LambdaIntegration(uploadManagerLambda), {
+      authorizationType: apigateway.AuthorizationType.NONE,  // Token-based auth in Lambda
+    })
+
+    // Create /clients resource and GET method (Cognito auth required)
+    // This endpoint is used by the dashboard to fetch all clients
+    const clientsResource = api.root.addResource("clients")
+    const statusTrackerLambda = this.taxLambdaFunctions['TaxStatus']
+    
+    clientsResource.addMethod("GET", new apigateway.LambdaIntegration(statusTrackerLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    })
+
     // Store the API URL for access from main stack
     this.feedbackApiUrl = api.url
 
@@ -549,7 +718,7 @@ export class BackendStack extends cdk.NestedStack {
     })
   }
 
-  private createAgentCoreGateway(config: AppConfig): void {
+  private createAgentCoreGateway(config: AppConfig, frontendUrl: string): void {
     // Get tax data layer table names
     const clientsTableName = `${config.stack_name_base}-clients`;
     const documentsTableName = `${config.stack_name_base}-documents`;
@@ -616,9 +785,20 @@ export class BackendStack extends cdk.NestedStack {
         targetName: "upload",  // SHORT name (6 chars)
         specPath: "upload_manager"
       },
+      {
+        id: "TaxSendLink",
+        handler: "send_upload_link_lambda.lambda_handler",
+        path: "send_upload_link",
+        env: { 
+          CLIENTS_TABLE: clientsTableName, 
+          FOLLOWUP_TABLE: followupsTableName, 
+          SES_FROM_EMAIL: sesFromEmail,
+          FRONTEND_URL: frontendUrl
+        },
+        targetName: "send-link",  // SHORT name (9 chars)
+        specPath: "send_upload_link"
+      },
     ];
-
-    const taxLambdaFunctions: { [key: string]: lambda.Function } = {};
 
     taxLambdas.forEach(tc => {
       const fn = new lambda.Function(this, tc.id, {
@@ -636,7 +816,7 @@ export class BackendStack extends cdk.NestedStack {
         }),
       });
       
-      taxLambdaFunctions[tc.id] = fn;
+      this.taxLambdaFunctions[tc.id] = fn;
     });
 
     // Create comprehensive IAM role for gateway
@@ -646,7 +826,7 @@ export class BackendStack extends cdk.NestedStack {
     })
 
     // Lambda invoke permission for tax tools only
-    Object.values(taxLambdaFunctions).forEach(fn => fn.grantInvoke(gatewayRole));
+    Object.values(this.taxLambdaFunctions).forEach(fn => fn.grantInvoke(gatewayRole));
 
     // Bedrock permissions (region-agnostic)
     gatewayRole.addToPolicy(
@@ -738,7 +918,7 @@ export class BackendStack extends cdk.NestedStack {
         targetConfiguration: {
           mcp: {
             lambda: {
-              lambdaArn: taxLambdaFunctions[toolConfig.id].functionArn,
+              lambdaArn: this.taxLambdaFunctions[toolConfig.id].functionArn,
               toolSchema: {
                 inlinePayload: [toolSpec],
               },

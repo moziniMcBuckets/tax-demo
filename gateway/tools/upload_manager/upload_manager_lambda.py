@@ -99,6 +99,7 @@ def sanitize_filename(filename: str) -> str:
 
 def generate_presigned_url(
     client_id: str,
+    client_name: str,
     filename: str,
     tax_year: int,
     document_type: str
@@ -108,6 +109,7 @@ def generate_presigned_url(
     
     Args:
         client_id: Client identifier
+        client_name: Client full name (e.g., "Mohamed Mohamud")
         filename: Name of file to upload
         tax_year: Tax year
         document_type: Type of document (W-2, 1099-INT, etc.)
@@ -118,8 +120,22 @@ def generate_presigned_url(
     # Sanitize filename
     safe_filename = sanitize_filename(filename)
     
-    # S3 key with client folder structure
-    s3_key = f"{client_id}/{tax_year}/{safe_filename}"
+    # Create folder name from client name: lastName_FirstName_TaxYear
+    name_parts = client_name.strip().split()
+    if len(name_parts) >= 2:
+        # Assume last word is last name, rest is first name
+        first_name = '_'.join(name_parts[:-1])
+        last_name = name_parts[-1]
+        folder_name = f"{last_name}_{first_name}_{tax_year}"
+    else:
+        # Fallback to just the name if only one word
+        folder_name = f"{client_name.replace(' ', '_')}_{tax_year}"
+    
+    # Remove special characters from folder name
+    folder_name = ''.join(c for c in folder_name if c.isalnum() or c in '_-')
+    
+    # S3 key with client folder structure: lastName_FirstName_TaxYear/filename
+    s3_key = f"{folder_name}/{safe_filename}"
     
     try:
         # Generate presigned URL (valid for 15 minutes)
@@ -215,9 +231,27 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
             }
         
+        # Get client info to extract name
+        table = dynamodb.Table(CLIENTS_TABLE)
+        client_response = table.get_item(Key={'client_id': client_id})
+        if 'Item' not in client_response:
+            return {
+                'statusCode': 404,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                },
+                'body': json.dumps({
+                    'error': 'Client not found'
+                })
+            }
+        
+        client_name = client_response['Item'].get('client_name', 'Unknown_Client')
+        
         # Generate presigned URL
         result = generate_presigned_url(
             client_id=client_id,
+            client_name=client_name,
             filename=filename,
             tax_year=tax_year,
             document_type=document_type

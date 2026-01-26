@@ -1,0 +1,9 @@
+The Strands Agents SDK offers several strategic approaches for model selection to optimize both cost and performance. When selecting models, it's recommended to follow a 5-step framework that begins with defining clear performance requirements for intelligence, speed, and cost parameters. Testing candidate models against domain-specific tasks rather than relying solely on general benchmarks is crucial for accurate evaluation.
+
+A practical approach is to start with the smallest, simplest model that meets minimum requirements, then evaluate whether larger alternatives deliver sufficient improvements to justify additional costs. This "start simple, then escalate" strategy helps avoid unnecessary expenses while maintaining adequate performance.
+
+Multi-model strategies are particularly effective for balancing cost and performance. Model cascading starts with smaller, faster models for initial processing and escalates to larger models only when necessary, which is especially useful for customer service applications. This approach reserves premium resources for complex cases while handling routine queries with more cost-efficient models.
+
+For specialized use cases, matching model capabilities to specific requirements can achieve both quality improvements and cost optimization through efficient token utilization. The Nova family's tiered approach provides clear upgrade paths based on application sophistication, from high-throughput simple tasks (Micro) to complex multimodal reasoning (Pro/Premier).
+
+Continuous evaluation is essential as new models and optimizations become available, allowing teams to systematically reassess their selection to identify potential improvements in both performance and cost efficiency.

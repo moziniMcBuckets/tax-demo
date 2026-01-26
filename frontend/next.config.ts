@@ -3,6 +3,7 @@ import type { NextConfig } from "next"
 const nextConfig: NextConfig = {
   distDir: "build",
   output: "export",
+  trailingSlash: true,  // Enable trailing slashes to match Amplify behavior
   // ESLint configuration for builds
   eslint: {
     // Keep ESLint enabled during builds (warnings won't fail the build)

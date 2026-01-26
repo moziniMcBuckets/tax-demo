@@ -178,21 +178,28 @@ def process_s3_upload(bucket: str, key: str) -> None:
     """
     logger.info(f"Processing upload: {bucket}/{key}")
     
-    # Parse key: client_id/tax_year/filename
-    parts = key.split('/')
-    if len(parts) < 3:
-        logger.warning(f"Invalid S3 key format: {key}")
-        return
-    
-    client_id = parts[0]
-    tax_year = parts[1]
-    filename = parts[2]
-    
-    # Get object metadata
+    # Get object metadata (contains client_id, document_type, etc.)
     metadata = extract_metadata_from_s3(bucket, key)
-    document_type = metadata.get('document-type', 'Unknown')
     
-    logger.info(f"Document type: {document_type}, Client: {client_id}")
+    # Extract client_id from metadata (not from key path)
+    client_id = metadata.get('client-id')
+    document_type = metadata.get('document-type', 'Unknown')
+    tax_year = metadata.get('tax-year', str(datetime.now().year))
+    
+    if not client_id:
+        logger.error(f"No client-id in metadata for {key}, attempting to parse from key")
+        # Fallback: try to parse from key if metadata missing
+        parts = key.split('/')
+        if len(parts) >= 2:
+            # New format: lastName_FirstName_TaxYear/filename
+            # We can't reliably extract client_id from this, so log error
+            logger.error(f"Cannot determine client_id from key: {key}")
+            return
+        else:
+            logger.error(f"Invalid S3 key format: {key}")
+            return
+    
+    logger.info(f"Document type: {document_type}, Client: {client_id}, Tax Year: {tax_year}")
     
     # Update document status
     s3_path = f"s3://{bucket}/{key}"

@@ -1,0 +1,25 @@
+{
+  "name": "send_upload_link",
+  "description": "Generate a secure upload token and send an email with the upload portal link to a client. The client can use this link to upload their tax documents without needing to log in. The link is time-limited and unique to each client.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "client_id": {
+        "type": "string",
+        "description": "The unique identifier of the client who should receive the upload link"
+      },
+      "days_valid": {
+        "type": "integer",
+        "description": "Number of days the upload link should remain valid. Must be between 1 and 90. Default is 30 days.",
+        "default": 30,
+        "minimum": 1,
+        "maximum": 90
+      },
+      "custom_message": {
+        "type": "string",
+        "description": "Optional custom message from the accountant to include in the email. This will be added before the standard instructions."
+      }
+    },
+    "required": ["client_id"]
+  }
+}

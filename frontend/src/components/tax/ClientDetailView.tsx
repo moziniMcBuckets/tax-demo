@@ -13,55 +13,132 @@
  * - Quick actions
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Client, Document } from '@/types/tax/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { useAuth } from 'react-oidc-context';
 import { 
   CheckCircle, 
   XCircle, 
   Mail, 
   AlertTriangle,
+  AlertCircle,
   ArrowLeft,
   Phone,
-  Calendar
+  Calendar,
+  RefreshCw
 } from 'lucide-react';
 
 interface ClientDetailViewProps {
-  client: Client;
-  documents: Document[];
+  clientId: string;
   onBack: () => void;
-  onSendReminder: (clientId: string) => void;
-  onEscalate: (clientId: string) => void;
 }
 
 export function ClientDetailView({ 
-  client, 
-  documents, 
-  onBack, 
-  onSendReminder, 
-  onEscalate 
+  clientId, 
+  onBack
 }: ClientDetailViewProps) {
-  const [loading, setLoading] = useState(false);
+  const auth = useAuth();
+  const [client, setClient] = useState<Client | null>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSendReminder = async () => {
+  useEffect(() => {
+    if (auth.isAuthenticated) {
+      fetchClientDetails();
+    }
+  }, [clientId, auth.isAuthenticated]);
+
+  const fetchClientDetails = async () => {
     setLoading(true);
+    setError(null);
+    
     try {
-      await onSendReminder(client.client_id);
+      // Load config
+      const configResponse = await fetch('/aws-exports.json');
+      const config = await configResponse.json();
+      const apiUrl = config.feedbackApiUrl;
+      
+      // Get ID token
+      const idToken = auth.user?.id_token;
+      
+      if (!idToken) {
+        throw new Error('Not authenticated');
+      }
+      
+      // Fetch client details from API
+      const response = await fetch(`${apiUrl}clients?accountant_id=acc_test_001&client_id=${clientId}`, {
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch client details: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      if (data.clients && data.clients.length > 0) {
+        const clientData = data.clients[0];
+        setClient(clientData);
+        
+        // Transform required_documents to Document format
+        const docs = clientData.required_documents?.map((doc: any) => ({
+          type: doc.type,
+          source: doc.source,
+          received: doc.received
+        })) || [];
+        setDocuments(docs);
+      } else {
+        throw new Error('Client not found');
+      }
+      
+    } catch (err) {
+      console.error('Error fetching client details:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load client details');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSendReminder = async () => {
+    // TODO: Implement send reminder via API
+    alert('Send reminder functionality - to be implemented');
   };
 
   const handleEscalate = async () => {
-    setLoading(true);
-    try {
-      await onEscalate(client.client_id);
-    } finally {
-      setLoading(false);
-    }
+    // TODO: Implement escalate via API
+    alert('Escalate functionality - to be implemented');
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 animate-spin mx-auto text-gray-400 mb-2" />
+          <p className="text-gray-500">Loading client details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !client) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <AlertCircle className="w-8 h-8 mx-auto text-red-500 mb-2" />
+          <p className="text-red-600">{error || 'Client not found'}</p>
+          <Button onClick={onBack} variant="outline" className="mt-4">
+            Back to Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-6">
