@@ -109,6 +109,74 @@ aws logs describe-log-streams \
 
 ---
 
+## Agent Issues
+
+### Issue: Agent System Prompt Not Updating
+
+**Symptoms:**
+- Updated agent code in `patterns/strands-single-agent/`
+- Deployed via `cdk deploy tax-agent`
+- Agent still uses old behavior/responses
+- System prompt changes not reflected
+
+**Root Cause:**
+AgentCore Runtime caches the agent container image. Even after CDK deployment builds and pushes a new image, the running Runtime container may continue using the cached version.
+
+**Why This Happens:**
+- Runtime containers are long-lived for performance
+- New deployments don't automatically restart containers
+- Container refresh happens on schedule or manual trigger
+- Can take hours for automatic refresh
+
+**Solutions:**
+
+**Option 1: Force Runtime Update (Recommended)**
+```typescript
+// In backend-stack.ts, change runtime name to force recreation
+runtimeName: `${config.stack_name_base}_${Date.now()}`,  // Adds timestamp
+```
+Then deploy: `cdk deploy tax-agent`
+
+**Option 2: Wait for Natural Refresh**
+- Runtime will eventually pick up new code
+- Can take 1-24 hours
+- No action needed, just patience
+
+**Option 3: Delete and Recreate Runtime**
+```bash
+# Via CDK - comment out Runtime, deploy, uncomment, deploy again
+# This forces complete recreation
+```
+
+**Option 4: Use AgentCore CLI (if available)**
+```bash
+# Install toolkit
+pip install bedrock-agentcore-starter-toolkit
+
+# Update runtime
+agent-core runtime update --runtime-id <id> --force-refresh
+```
+
+**Workaround for Users:**
+Until Runtime refreshes, users can provide their accountant ID once:
+```
+User: "My accountant ID is d8e16310-9011-7040-090e-748cb2308ecb"
+Agent: [Stores in memory, uses for rest of session]
+```
+
+**Prevention:**
+- Test agent changes in development environment first
+- Use versioned runtime names for critical updates
+- Document expected refresh time for users
+- Consider blue-green deployment for zero-downtime updates
+
+**Impact:**
+- Low for beta (workaround available)
+- Medium for production (user experience)
+- High for critical prompt fixes (requires immediate update)
+
+---
+
 ## CDK Deployment Issues
 
 ### Issue #1: CDK CfnGatewayTarget inlinePayload Format Error
