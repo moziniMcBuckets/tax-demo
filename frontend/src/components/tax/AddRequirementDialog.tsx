@@ -47,12 +47,13 @@ export function AddRequirementDialog({ open, onClose, onAdd, clientName }: AddRe
   const [selectedType, setSelectedType] = useState('');
   const [customType, setCustomType] = useState('');
   const [source, setSource] = useState('');
+  const [validationError, setValidationError] = useState('');
 
   const handleAdd = () => {
     const docType = selectedType === 'Custom...' ? customType : selectedType;
     
     if (!docType) {
-      alert('Please select or enter a document type');
+      setValidationError('Please select or enter a document type');
       return;
     }
 
@@ -62,6 +63,7 @@ export function AddRequirementDialog({ open, onClose, onAdd, clientName }: AddRe
     setSelectedType('');
     setCustomType('');
     setSource('');
+    setValidationError('');
     onClose();
   };
 
@@ -74,6 +76,12 @@ export function AddRequirementDialog({ open, onClose, onAdd, clientName }: AddRe
             Add a required document for {clientName}
           </DialogDescription>
         </DialogHeader>
+
+        {validationError && (
+          <div className="mx-6 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-900">{validationError}</p>
+          </div>
+        )}
 
         <div className="space-y-4 py-4">
           {/* Document Type Selection */}

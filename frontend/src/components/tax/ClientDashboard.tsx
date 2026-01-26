@@ -46,6 +46,7 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
   const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
   const [bulkOperationInProgress, setBulkOperationInProgress] = useState(false);
   const [bulkOperationStatus, setBulkOperationStatus] = useState<string>('');
+  const [bulkOperationResult, setBulkOperationResult] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
   // Fetch clients data
   useEffect(() => {
@@ -142,7 +143,8 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
 
   const handleBulkSendReminders = async () => {
     if (selectedClients.size === 0) {
-      alert('Please select at least one client');
+      setBulkOperationResult({type: 'error', message: 'Please select at least one client'});
+      setTimeout(() => setBulkOperationResult(null), 3000);
       return;
     }
 
@@ -174,19 +176,27 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
       setBulkOperationStatus('');
       setSelectedClients(new Set());
       
-      alert(`Reminders sent!\nSuccess: ${data.succeeded}\nFailed: ${data.failed}`);
+      setBulkOperationResult({
+        type: 'success',
+        message: `Reminders sent! Success: ${data.succeeded}, Failed: ${data.failed}`
+      });
+      setTimeout(() => setBulkOperationResult(null), 5000);
       fetchClients();  // Refresh data
       
     } catch (err) {
       setBulkOperationInProgress(false);
       setBulkOperationStatus('');
-      alert(`Error: ${err instanceof Error ? err.message : 'Failed to send reminders'}`);
+      setBulkOperationResult({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to send reminders'
+      });
     }
   };
 
   const handleBulkSendUploadLinks = async () => {
     if (selectedClients.size === 0) {
-      alert('Please select at least one client');
+      setBulkOperationResult({type: 'error', message: 'Please select at least one client'});
+      setTimeout(() => setBulkOperationResult(null), 3000);
       return;
     }
 
@@ -218,19 +228,27 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
       setBulkOperationStatus('');
       setSelectedClients(new Set());
       
-      alert(`Upload links sent!\nSuccess: ${data.succeeded}\nFailed: ${data.failed}`);
+      setBulkOperationResult({
+        type: 'success',
+        message: `Upload links sent! Success: ${data.succeeded}, Failed: ${data.failed}`
+      });
+      setTimeout(() => setBulkOperationResult(null), 5000);
       fetchClients();
       
     } catch (err) {
       setBulkOperationInProgress(false);
       setBulkOperationStatus('');
-      alert(`Error: ${err instanceof Error ? err.message : 'Failed to send upload links'}`);
+      setBulkOperationResult({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to send upload links'
+      });
     }
   };
 
   const handleBulkDownload = async () => {
     if (selectedClients.size === 0) {
-      alert('Please select at least one client');
+      setBulkOperationResult({type: 'error', message: 'Please select at least one client'});
+      setTimeout(() => setBulkOperationResult(null), 3000);
       return;
     }
 
@@ -264,9 +282,16 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
       if (data.success && data.download_url) {
         // Open download URL
         window.open(data.download_url, '_blank');
-        alert(`ZIP created with ${data.total_files} files!\nDownload started.`);
+        setBulkOperationResult({
+          type: 'success',
+          message: `ZIP created with ${data.total_files} files! Download started.`
+        });
+        setTimeout(() => setBulkOperationResult(null), 5000);
       } else {
-        alert(`Error: ${data.error || 'Failed to create ZIP'}`);
+        setBulkOperationResult({
+          type: 'error',
+          message: data.error || 'Failed to create ZIP'
+        });
       }
       
       setSelectedClients(new Set());
@@ -274,7 +299,10 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
     } catch (err) {
       setBulkOperationInProgress(false);
       setBulkOperationStatus('');
-      alert(`Error: ${err instanceof Error ? err.message : 'Failed to download documents'}`);
+      setBulkOperationResult({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to download documents'
+      });
     }
   };
 
@@ -436,6 +464,26 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
             <div className="mb-4 p-3 bg-blue-50 text-blue-800 rounded-md flex items-center gap-2">
               <RefreshCw className="w-4 h-4 animate-spin" />
               <span>{bulkOperationStatus}</span>
+            </div>
+          )}
+
+          {/* Bulk Operation Result */}
+          {bulkOperationResult && (
+            <div className={`mb-4 p-4 rounded-lg border ${
+              bulkOperationResult.type === 'success' 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-red-50 border-red-200'
+            }`}>
+              <div className="flex items-center gap-2">
+                {bulkOperationResult.type === 'success' ? (
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                )}
+                <span className={bulkOperationResult.type === 'success' ? 'text-green-900' : 'text-red-900'}>
+                  {bulkOperationResult.message}
+                </span>
+              </div>
             </div>
           )}
 
