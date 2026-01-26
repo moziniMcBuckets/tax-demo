@@ -93,6 +93,9 @@ export class BackendStack extends cdk.NestedStack {
     // Create Feedback DynamoDB table (example of application data storage)
     const feedbackTable = this.createFeedbackTable(props.config)
 
+    // Create Usage Tracking table for billing
+    const usageTable = this.createUsageTrackingTable(props.config)
+
     // Create API Gateway Feedback API resources (example of best-practice API Gateway + Lambda
     // pattern)
     this.createFeedbackApi(props.config, props.frontendUrl, feedbackTable)
@@ -570,6 +573,48 @@ export class BackendStack extends cdk.NestedStack {
     return feedbackTable
   }
 
+  // Creates a DynamoDB table for tracking usage and billing
+  private createUsageTrackingTable(config: AppConfig): dynamodb.Table {
+    const usageTable = new dynamodb.Table(this, "UsageTrackingTable", {
+      tableName: `${config.stack_name_base}-usage`,
+      partitionKey: {
+        name: "accountant_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "timestamp",
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,  // Keep billing data
+      pointInTimeRecovery: true,
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+    })
+
+    // Add GSI for monthly aggregation
+    usageTable.addGlobalSecondaryIndex({
+      indexName: "month-index",
+      partitionKey: {
+        name: "accountant_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "month",
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    })
+
+    // Store table name in SSM for Lambda access
+    new ssm.StringParameter(this, "UsageTableParam", {
+      parameterName: `/${config.stack_name_base}/usage-table`,
+      stringValue: usageTable.tableName,
+      description: "Usage tracking table name",
+    })
+
+    return usageTable
+  }
+
   /**
    * Creates an API Gateway with Lambda integration for the feedback endpoint.
    * This is an EXAMPLE implementation demonstrating best practices for API Gateway + Lambda.
@@ -641,6 +686,7 @@ export class BackendStack extends cdk.NestedStack {
         CLIENT_BUCKET: `${config.stack_name_base}-client-docs-${this.account}`,
         SES_FROM_EMAIL: 'mhamuzn@amazon.com',
         FRONTEND_URL: frontendUrl,
+        USAGE_TABLE: `${config.stack_name_base}-usage`,
         CORS_ALLOWED_ORIGINS: `${frontendUrl},http://localhost:3000`,
       },
       timeout: cdk.Duration.minutes(5),  // Longer timeout for batch operations
@@ -670,12 +716,41 @@ export class BackendStack extends cdk.NestedStack {
       }),
     })
 
+    // Create Billing Lambda
+    const billingLambda = new PythonFunction(this, "BillingLambda", {
+      functionName: `${config.stack_name_base}-billing`,
+      runtime: lambda.Runtime.PYTHON_3_13,
+      entry: path.join(__dirname, "..", "lambdas", "billing"),
+      handler: "lambda_handler",
+      environment: {
+        USAGE_TABLE: `${config.stack_name_base}-usage`,
+        CORS_ALLOWED_ORIGINS: `${frontendUrl},http://localhost:3000`,
+      },
+      timeout: cdk.Duration.seconds(30),
+      logGroup: new logs.LogGroup(this, "BillingLogGroup", {
+        logGroupName: `/aws/lambda/${config.stack_name_base}-billing`,
+        retention: logs.RetentionDays.ONE_WEEK,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
+    })
+
     // Grant permissions for client management
     clientMgmtLambda.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
         resources: [
           `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-clients`,
+        ]
+      })
+    );
+
+    // Grant permissions for billing
+    billingLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['dynamodb:Query', 'dynamodb:Scan'],
+        resources: [
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-usage`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-usage/index/*`,
         ]
       })
     );
@@ -706,6 +781,13 @@ export class BackendStack extends cdk.NestedStack {
       new iam.PolicyStatement({
         actions: ['ses:SendEmail', 'ses:SendRawEmail'],
         resources: ['*']
+      })
+    );
+
+    batchOpsLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['dynamodb:PutItem'],
+        resources: [`arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-usage`]
       })
     );
 
@@ -824,6 +906,14 @@ export class BackendStack extends cdk.NestedStack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     })
 
+    // Create /billing resource for usage and cost tracking
+    const billingResource = api.root.addResource("billing")
+    
+    billingResource.addMethod("GET", new apigateway.LambdaIntegration(billingLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    })
+
     // Store the API URL for access from main stack
     this.feedbackApiUrl = api.url
 
@@ -925,7 +1015,10 @@ export class BackendStack extends cdk.NestedStack {
         timeout: cdk.Duration.seconds(60),
         memorySize: 512,
         architecture: lambda.Architecture.ARM_64,
-        environment: tc.env,
+        environment: {
+          ...tc.env,
+          USAGE_TABLE: `${config.stack_name_base}-usage`,  // Add usage table to all
+        },
         logGroup: new logs.LogGroup(this, `${tc.id}LogGroup`, {
           logGroupName: `/aws/lambda/${config.stack_name_base}-${tc.path}`,
           retention: logs.RetentionDays.ONE_MONTH,
@@ -934,6 +1027,16 @@ export class BackendStack extends cdk.NestedStack {
       });
       
       this.taxLambdaFunctions[tc.id] = fn;
+    });
+
+    // Grant all tax Lambdas permission to write usage data
+    Object.values(this.taxLambdaFunctions).forEach(fn => {
+      fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['dynamodb:PutItem'],
+          resources: [`arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-usage`]
+        })
+      );
     });
 
     // Create comprehensive IAM role for gateway

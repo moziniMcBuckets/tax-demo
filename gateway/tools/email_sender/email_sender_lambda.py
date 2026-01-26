@@ -8,10 +8,20 @@ Email Sender Lambda - Sends personalized follow-up emails via AWS SES.
 import json
 import logging
 import os
+import sys
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
 import boto3
 from botocore.exceptions import ClientError
+
+# Add common layer to path
+sys.path.insert(0, '/opt/python')
+try:
+    from usage_tracker import track_usage
+except ImportError:
+    # Fallback if layer not available
+    def track_usage(*args, **kwargs):
+        pass
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -205,6 +215,15 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             to_email=client_info['email'],
             subject=personalized['subject'],
             body=personalized['body']
+        )
+        
+        # Track usage for billing
+        track_usage(
+            accountant_id=accountant_id,
+            operation='send_reminder_email',
+            resource_type='email_sent',
+            quantity=1,
+            metadata={'client_id': client_id, 'followup_number': followup_number}
         )
         
         followup_id = log_followup(

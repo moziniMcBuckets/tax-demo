@@ -29,6 +29,40 @@ CLIENTS_TABLE = os.environ['CLIENTS_TABLE']
 FOLLOWUP_TABLE = os.environ['FOLLOWUP_TABLE']
 SES_FROM_EMAIL = os.environ['SES_FROM_EMAIL']
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://yourdomain.com')
+USAGE_TABLE = os.environ.get('USAGE_TABLE', '')
+
+
+def track_usage(accountant_id: str, operation: str, resource_type: str, quantity: float = 1.0):
+    """Track usage for billing."""
+    if not USAGE_TABLE:
+        return
+    
+    try:
+        from datetime import datetime
+        from decimal import Decimal
+        
+        usage_table = dynamodb.Table(USAGE_TABLE)
+        timestamp = datetime.utcnow().isoformat()
+        month = timestamp[:7]
+        
+        pricing = {'email_sent': 0.0001}
+        unit_cost = pricing.get(resource_type, 0.0)
+        estimated_cost = unit_cost * quantity
+        
+        usage_table.put_item(Item={
+            'accountant_id': accountant_id,
+            'timestamp': timestamp,
+            'month': month,
+            'operation': operation,
+            'resource_type': resource_type,
+            'quantity': Decimal(str(quantity)),
+            'unit_cost': Decimal(str(unit_cost)),
+            'estimated_cost': Decimal(str(estimated_cost))
+        })
+        
+        logger.info(f"Tracked usage: {operation}, cost: ${estimated_cost:.6f}")
+    except Exception as e:
+        logger.error(f"Error tracking usage: {e}")
 
 
 def get_client_info(client_id: str) -> Dict[str, Any]:
@@ -335,6 +369,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             message_id=message_id,
             recipient_email=client_email,
             accountant_id=accountant_id
+        )
+        
+        # Track usage for billing
+        track_usage(
+            accountant_id=accountant_id,
+            operation='send_upload_link',
+            resource_type='email_sent',
+            quantity=1
         )
         
         # Prepare response

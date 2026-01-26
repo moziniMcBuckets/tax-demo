@@ -1,34 +1,43 @@
 # Tax Document Collection Agent
 
+**Status:** 🚀 Production-Ready Beta Release
+
 An intelligent AI agent built on Amazon Bedrock AgentCore that automates tax document collection for accounting firms. This production-ready solution reduces manual follow-up time by 90% while ensuring clients submit required documents on time.
 
+**Beta Features:** Multi-accountant support, self-service sign-up, usage tracking, bulk operations, and complete document management workflow.
 
 ## What It Does
 
 The Tax Document Collection Agent helps accountants manage client document collection during tax season by:
 
+- **Multi-accountant support** - Each accountant has isolated workspace with their clients
+- **Custom requirements** - Define unique document needs per client (no assumptions)
 - **Tracking document status** across all clients in real-time
-- **Sending automated reminders** at strategic intervals (Day 3, 10, 24)
+- **Sending automated reminders** and upload links via email
 - **Providing secure upload portals** with unique tokens per client
-- **Escalating urgent cases** automatically based on deadlines
+- **Bulk operations** - Process multiple clients at once
+- **Usage tracking** - Track costs per accountant for billing
 - **Answering questions** about client status via natural language chat
-- **Managing requirements** for different tax scenarios (W-2, 1099, business, etc.)
 
 ## Key Features
 
-✅ **Multi-channel interface**: Chat with agent, visual dashboard, client upload portal  
-✅ **Intelligent automation**: Automatic reminders, upload link generation, status tracking  
-✅ **Secure document handling**: S3 storage with presigned URLs and token-based access  
-✅ **Email integration**: SES-powered notifications with customizable templates  
-✅ **Real-time tracking**: DynamoDB-backed status with S3 event triggers  
-✅ **Visual dashboard**: Real-time client overview with filtering and search  
-✅ **Personalized requirements**: Each client has custom document requirements  
-✅ **Name-based organization**: S3 folders organized by LastName_FirstName_Year  
-✅ **Cost-effective**: ~$3.86 per tax season for 50 clients
+✅ **Multi-accountant support** - Self-service sign-up, JWT-based data isolation  
+✅ **Custom requirements** - Accountant defines what each client needs  
+✅ **Multi-channel interface** - Chat, dashboard, client portal  
+✅ **Bulk operations** - Send reminders/links to multiple clients  
+✅ **Document download** - Download individual or all documents as ZIP  
+✅ **Intelligent automation** - Reminders, upload links, status tracking  
+✅ **Secure document handling** - S3 with presigned URLs, LastName_FirstName_Year folders  
+✅ **Email integration** - SES-powered with verified sender  
+✅ **Real-time updates** - No caching, instant data sync  
+✅ **Visual dashboard** - Filtering, search, bulk selection  
+✅ **Usage tracking** - Per-tenant cost tracking for billing  
+✅ **Professional UI** - Custom auth, modals, inline messages  
+✅ **Cost-effective** - ~$5-10 per month for 50 clients
 
 ## Quick Start
 
-Deploy the complete system in 20 minutes:
+Deploy the complete system in 30 minutes:
 
 ```bash
 # 1. Install dependencies
@@ -37,11 +46,11 @@ npm install
 
 # 2. Configure
 cp config-tax-agent.yaml config.yaml
-# Edit config.yaml with your stack name and email
+# Edit config.yaml with your stack name
 
 # 3. Deploy infrastructure
 cdk bootstrap  # First time only
-cdk deploy --all --require-approval never
+cdk deploy tax-agent --require-approval never
 
 # 4. Deploy frontend
 cd ..

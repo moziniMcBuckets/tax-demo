@@ -4,9 +4,19 @@
 
 This guide provides step-by-step instructions to deploy the Tax Document Agent to a completely new AWS account. Follow every step carefully to avoid errors.
 
-**Time Required:** 45-60 minutes
+**Time Required:** 30-45 minutes
 **Difficulty:** Intermediate
+**Cost:** ~$5-10/month for 50 clients (with usage tracking)
 **Prerequisites:** AWS account with admin access
+
+**What You'll Deploy:**
+- 10 Lambda functions (7 Gateway tools + 3 API functions)
+- 6 DynamoDB tables with GSIs
+- AgentCore (Gateway, Runtime, Memory)
+- API Gateway with 8 endpoints
+- Cognito with self-service sign-up
+- S3 with event notifications
+- Usage tracking for billing
 
 ---
 

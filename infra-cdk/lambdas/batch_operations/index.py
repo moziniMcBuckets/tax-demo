@@ -30,6 +30,7 @@ logger.setLevel(logging.INFO)
 # Initialize AWS clients
 dynamodb = boto3.resource('dynamodb')
 s3 = boto3.client('s3')
+ses = boto3.client('ses')
 
 # Environment variables
 CLIENTS_TABLE = os.environ['CLIENTS_TABLE']
@@ -37,9 +38,46 @@ DOCUMENTS_TABLE = os.environ['DOCUMENTS_TABLE']
 FOLLOWUPS_TABLE = os.environ['FOLLOWUPS_TABLE']
 CLIENT_BUCKET = os.environ['CLIENT_BUCKET']
 SES_FROM_EMAIL = os.environ['SES_FROM_EMAIL']
+USAGE_TABLE = os.environ.get('USAGE_TABLE', '')
 
-# Initialize SES client
-ses = boto3.client('ses')
+
+def track_usage(accountant_id: str, operation: str, resource_type: str, quantity: float = 1.0):
+    """Track usage for billing."""
+    if not USAGE_TABLE:
+        return
+    
+    try:
+        from datetime import datetime
+        from decimal import Decimal
+        
+        usage_table = dynamodb.Table(USAGE_TABLE)
+        timestamp = datetime.utcnow().isoformat()
+        month = timestamp[:7]
+        
+        # Pricing
+        pricing = {
+            'email_sent': 0.0001,
+            'agent_invocation': 0.003,
+            'gateway_call': 0.0001,
+        }
+        
+        unit_cost = pricing.get(resource_type, 0.0)
+        estimated_cost = unit_cost * quantity
+        
+        usage_table.put_item(Item={
+            'accountant_id': accountant_id,
+            'timestamp': timestamp,
+            'month': month,
+            'operation': operation,
+            'resource_type': resource_type,
+            'quantity': Decimal(str(quantity)),  # Convert to Decimal
+            'unit_cost': Decimal(str(unit_cost)),
+            'estimated_cost': Decimal(str(estimated_cost))
+        })
+        
+        logger.info(f"Tracked usage: {operation}, cost: ${estimated_cost:.6f}")
+    except Exception as e:
+        logger.error(f"Error tracking usage: {e}")
 
 
 def get_client_info(client_id: str) -> Dict[str, Any]:
@@ -132,6 +170,14 @@ Your Accountant
         
         logger.info(f"Sent reminder to {client_name} ({client_email})")
         
+        # Track usage
+        track_usage(
+            accountant_id=client_info.get('accountant_id', 'unknown'),
+            operation='send_reminder',
+            resource_type='email_sent',
+            quantity=1
+        )
+        
         return {
             'client_id': client_id,
             'client_name': client_name,
@@ -160,7 +206,7 @@ def send_upload_link_to_client(client_id: str, options: Dict[str, Any]) -> Dict[
         Result dictionary with success status
     """
     import secrets
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timedelta
     
     client_info = get_client_info(client_id)
     client_name = client_info.get('client_name', 'Unknown')
@@ -221,6 +267,14 @@ Your Accountant
         )
         
         logger.info(f"Sent upload link to {client_name} ({client_email})")
+        
+        # Track usage
+        track_usage(
+            accountant_id=client_info.get('accountant_id', 'unknown'),
+            operation='send_upload_link',
+            resource_type='email_sent',
+            quantity=1
+        )
         
         return {
             'client_id': client_id,

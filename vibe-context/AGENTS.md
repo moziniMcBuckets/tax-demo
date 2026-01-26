@@ -10,5 +10,6 @@
 6. New human users may not understand the best way to deploy the application, add features, etc. There is documentation on all of this, so make sure to read it and recommend methods and techniques to the human whenever possible.
 7. Always follow the rules outlined in the coding conventions and development best practice markdown docs provided to you.
 8. **CRITICAL: All backend infrastructure changes MUST be done through AWS CDK.** Never use AWS CLI commands to create, modify, or configure AWS resources (Lambda, DynamoDB, S3, IAM, etc.). All infrastructure must be defined in `infra-cdk/lib/*.ts` files and deployed via `cdk deploy`. This ensures infrastructure is version-controlled, reproducible, and follows Infrastructure as Code best practices. The only exception is temporary debugging or one-time data operations.
+9. **CRITICAL: Always update docs/REPLICATION_GUIDE.md when adding new features or infrastructure.** Any new Lambda functions, DynamoDB tables, API endpoints, or configuration changes must be documented in the replication guide so others can deploy the application. Update the "What's Deployed" section with counts and descriptions.
 
 **ALWAYS FOLLOW THESE RULES WHEN YOU WORK IN THIS PROJECT**

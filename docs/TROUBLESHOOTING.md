@@ -40,6 +40,75 @@ For real-time applications, disable API Gateway caching or use very short TTLs (
 
 ---
 
+## Debugging Lambda Issues
+
+### Issue: "No logs found" or `aws logs tail` fails
+
+**Symptoms:**
+- `aws logs tail` command exits with error
+- Says no logs found
+- But you know the Lambda was invoked
+
+**Root Cause:**
+`aws logs tail --since Xm` only shows logs within the time window. If there are no logs in that window, the command fails with exit code 1.
+
+**Solution:**
+
+**Method 1: Check if Lambda was actually invoked**
+```bash
+# Check CloudWatch metrics
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/Lambda \
+  --metric-name Invocations \
+  --dimensions Name=FunctionName,Value=<function-name> \
+  --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --period 3600 \
+  --statistics Sum
+```
+
+**Method 2: Get logs from specific stream (more reliable)**
+```bash
+# 1. Find the latest log stream
+aws logs describe-log-streams \
+  --log-group-name /aws/lambda/<function-name> \
+  --order-by LastEventTime \
+  --descending \
+  --max-items 1
+
+# 2. Get events from that stream
+aws logs get-log-events \
+  --log-group-name /aws/lambda/<function-name> \
+  --log-stream-name '<stream-name>' \
+  --limit 50 \
+  --query 'events[-20:].message' \
+  --output text
+```
+
+**Method 3: Use longer time window**
+```bash
+# Instead of --since 2m, use --since 10m or --since 1h
+aws logs tail /aws/lambda/<function-name> --since 1h
+```
+
+**Method 4: Check all log streams**
+```bash
+# List all streams to see if logs exist
+aws logs describe-log-streams \
+  --log-group-name /aws/lambda/<function-name> \
+  --order-by LastEventTime \
+  --descending \
+  --max-items 5
+```
+
+**Best Practice:**
+- Use `aws logs tail --follow` for real-time monitoring
+- Use `aws logs get-log-events` for historical debugging
+- Check CloudWatch metrics first to confirm invocations
+- Wait 2-3 seconds after operation for logs to propagate
+
+---
+
 ## CDK Deployment Issues
 
 ### Issue #1: CDK CfnGatewayTarget inlinePayload Format Error
