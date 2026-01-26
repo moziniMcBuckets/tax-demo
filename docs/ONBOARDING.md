@@ -27,17 +27,19 @@ Follow the complete deployment guide in `DEPLOYMENT.md`.
 ### What You Have:
 
 **Frontend (3 tabs):**
-1. **Chat** - Talk to AI agent
-2. **Dashboard** - View all clients
-3. **Upload** - Client document portal
+1. **Chat** - Talk to AI agent with natural language
+2. **Dashboard** - Visual overview with real-time data, filters, and search
+3. **Upload** - Client document portal (accessed via secure link)
 
-**Backend (6 tools):**
-1. Document Checker - Scans for missing docs
-2. Email Sender - Sends reminders
-3. Status Tracker - Shows overview
+**Backend (7 Gateway tools + 1 processor):**
+1. Document Checker - Scans S3 for uploaded documents
+2. Email Sender - Sends reminders via SES
+3. Status Tracker - Shows client overview
 4. Escalation Manager - Flags urgent cases
 5. Requirement Manager - Manages doc lists
-6. Upload Manager - Creates secure links
+6. Upload Manager - Creates presigned S3 URLs
+7. Send Upload Link - Generates and emails upload links
+8. Document Processor - S3-triggered status updates
 
 ### How It Works:
 
@@ -80,10 +82,23 @@ python3 scripts/test-all-gateway-tools.py
 ```
 
 **Verifies:**
-- All 6 tools respond
+- All 7 Gateway tools respond correctly
 - DynamoDB access works
 - S3 access works
+- Email sending configured
 - No errors
+
+### 3.3 Test Upload Link Feature
+
+```bash
+python3 scripts/test-send-upload-link.py --client-id client_001
+```
+
+**Verifies:**
+- Token generation works
+- Email delivery succeeds
+- Upload portal accessible
+- S3 presigned URLs generated
 
 ### 3.3 Test Frontend
 
@@ -105,15 +120,21 @@ acc_test_001
 
 **Third query:**
 ```
+Send Mohamed his upload link
+```
+**Response:** "Upload link sent to mohamed@example.com! Valid for 30 days."
+
+**Fourth query:**
+```
 Which clients are at risk?
 ```
 **Response:** Lists at-risk clients
 
-**Fourth query:**
+**Fifth query:**
 ```
-Send a reminder to Mohamed Mohamud
+What documents has Mohamed submitted?
 ```
-**Response:** Confirms email sent (check your inbox!)
+**Response:** Shows uploaded documents with dates
 
 ---
 

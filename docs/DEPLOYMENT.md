@@ -62,13 +62,14 @@ cdk deploy --all --require-approval never
 ```
 
 **What gets deployed:**
-- 7 Lambda functions (tax tools)
+- 8 Lambda functions (7 Gateway tools + Document Processor)
 - 5 DynamoDB tables
-- S3 bucket
+- S3 bucket with CORS and event notifications
 - AgentCore Gateway, Runtime, Memory
 - Cognito User Pool
 - Amplify app
-- API Gateway, SNS, EventBridge, CloudWatch
+- API Gateway with /clients, /upload-url, /feedback endpoints
+- SNS, EventBridge, CloudWatch
 
 ### 4. Deploy Frontend (5 minutes)
 
@@ -98,16 +99,15 @@ aws lambda update-function-configuration \
 
 ### 6. Add IAM Permissions (5 minutes)
 
-**Note:** This step is temporary until CDK is updated to include permissions automatically.
+Run the permission script to grant Lambda functions access to DynamoDB, S3, and SES:
 
-Run the permission script:
 ```bash
 python3 scripts/add-lambda-permissions.py
 ```
 
-Or manually add policies via AWS Console:
-- Lambda → Each function → Configuration → Permissions
-- Add inline policies for DynamoDB, S3, SES, SNS access
+This adds permissions for all 8 Lambda functions:
+- TaxDocChecker, TaxEmail, TaxStatus, TaxEscalate
+- TaxReqMgr, TaxUpload, TaxSendLink, DocumentProcessor
 
 ### 7. Create User (2 minutes)
 

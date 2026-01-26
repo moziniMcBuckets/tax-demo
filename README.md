@@ -14,13 +14,16 @@ The Tax Document Collection Agent helps accountants manage client document colle
 - **Answering questions** about client status via natural language chat
 - **Managing requirements** for different tax scenarios (W-2, 1099, business, etc.)
 
-### Key Features
+## Key Features
 
-✅ **Multi-channel interface**: Chat with the agent, view dashboard, or use client upload portal  
-✅ **Intelligent automation**: Automatic reminders and escalations based on deadlines  
-✅ **Secure document handling**: S3 storage with pre-signed URLs and token-based access  
+✅ **Multi-channel interface**: Chat with agent, visual dashboard, client upload portal  
+✅ **Intelligent automation**: Automatic reminders, upload link generation, status tracking  
+✅ **Secure document handling**: S3 storage with presigned URLs and token-based access  
 ✅ **Email integration**: SES-powered notifications with customizable templates  
-✅ **Real-time tracking**: DynamoDB-backed status updates and follow-up history  
+✅ **Real-time tracking**: DynamoDB-backed status with S3 event triggers  
+✅ **Visual dashboard**: Real-time client overview with filtering and search  
+✅ **Personalized requirements**: Each client has custom document requirements  
+✅ **Name-based organization**: S3 folders organized by LastName_FirstName_Year  
 ✅ **Cost-effective**: ~$3.86 per tax season for 50 clients
 
 ## Quick Start
@@ -60,21 +63,29 @@ The agent provides three interfaces:
 Natural language conversation with the AI agent:
 ```
 You: "Show me all my clients"
-Agent: "I need your accountant ID to retrieve your clients."
-
-You: "acc_test_001"
 Agent: "You have 5 clients: 2 complete, 1 at risk, 2 incomplete..."
 
-You: "Send a reminder to Mohamed Mohamud"
-Agent: "Reminder sent successfully to mohamed@example.com"
+You: "Send Mohamed his upload link"
+Agent: "Upload link sent to mohamed@example.com! Valid for 30 days."
+
+You: "What documents has Mohamed submitted?"
+Agent: "Mohamed has submitted his W-2. Still missing: Prior Year Tax Return."
 ```
 
 ### 2. Dashboard View
-Visual overview of all clients with status indicators:
+Visual overview of all clients with real-time data:
 - 🟢 Complete (all documents received)
-- 🟡 At Risk (deadline approaching, documents missing)
+- 🟡 Incomplete (some documents missing)
+- 🟠 At Risk (deadline approaching, multiple reminders)
 - 🔴 Escalated (urgent attention needed)
-- ⚪ Incomplete (normal follow-up)
+
+Features:
+- Summary cards with totals
+- Sortable client table
+- Filter by status
+- Search by name
+- Click to view detailed client information
+- Real-time progress bars
 
 ### 3. Client Upload Portal
 Secure, token-based upload interface for clients:
@@ -82,17 +93,25 @@ Secure, token-based upload interface for clients:
 - Drag-and-drop document upload
 - Real-time status updates
 - Mobile-friendly design
+- Direct upload to S3 with presigned URLs
 
 ## Architecture
 
-The system uses six specialized tools behind AgentCore Gateway:
+The system uses seven specialized tools behind AgentCore Gateway:
 
-1. **Document Checker** - Scans for missing documents and calculates risk scores
+1. **Document Checker** - Scans S3 for uploaded documents and calculates completion
 2. **Email Sender** - Sends customizable reminder emails via SES
 3. **Status Tracker** - Provides overview of all clients and their statuses
 4. **Escalation Manager** - Flags urgent cases based on deadlines
 5. **Requirement Manager** - Manages document requirements per client
-6. **Upload Manager** - Generates secure upload tokens and URLs
+6. **Upload Manager** - Generates secure presigned URLs for S3 uploads
+7. **Send Upload Link** - Generates tokens and emails upload portal links to clients
+
+### Additional Components
+
+- **Document Processor** - S3-triggered Lambda that updates DynamoDB when documents are uploaded
+- **API Gateway** - REST API with `/clients`, `/upload-url`, and `/feedback` endpoints
+- **Real-time Dashboard** - Fetches data directly from status tracker via API
 
 
 ### Backend Components
@@ -164,8 +183,49 @@ python3 scripts/test-tax-agent.py
 
 # Generate upload token for a client
 python3 scripts/generate-upload-token.py --client-id client_001
+
+# Test send upload link tool
+python3 scripts/test-send-upload-link.py --client-id client_001
+
+# Add IAM permissions to Lambda functions
+python3 scripts/add-lambda-permissions.py
+
+# Configure S3 CORS for uploads
+python3 scripts/configure-s3-cors.py
+
+# Generate architecture diagram
+python3 scripts/generate-architecture-diagram.py
 ```
 
+### Sample Queries
+
+See `docs/SAMPLE_QUERIES.md` for 40+ test queries covering all features.
+
+
+## Architecture Diagram
+
+![Architecture Diagram](docs/architecture-diagram/tax-demo-detailed-architecture.png)
+
+The system uses Amazon Cognito for authentication in four places:
+1. User login to the frontend web application
+2. Frontend to AgentCore Runtime communication
+3. Agent to AgentCore Gateway tool calls
+4. API Gateway REST endpoints
+
+### Data Flow
+
+**Upload Flow:**
+1. Accountant sends upload link via agent
+2. Client receives email with secure token
+3. Client uploads document to S3 (direct upload via presigned URL)
+4. S3 event triggers Document Processor Lambda
+5. DynamoDB updated with received status
+6. Dashboard and agent show updated status in real-time
+
+**Document Organization:**
+- S3 folders: `LastName_FirstName_TaxYear/` (e.g., `Mohamud_Mohamed_2024/`)
+- Metadata stored with each file (client_id, document_type, tax_year)
+- 7-year retention policy with intelligent tiering
 
 ## Cost Analysis
 
@@ -174,17 +234,18 @@ Estimated AWS costs for 50 clients during tax season (3 months):
 | Service | Usage | Cost |
 |---------|-------|------|
 | AgentCore Runtime | 500 invocations | $1.50 |
-| AgentCore Gateway | 3,000 calls | $0.30 |
-| Lambda | 10,000 invocations | $0.20 |
+| AgentCore Gateway | 3,500 calls | $0.35 |
+| Lambda (8 functions) | 12,000 invocations | $0.24 |
 | DynamoDB | 100K reads/writes | $0.25 |
 | S3 | 5GB storage + requests | $0.15 |
 | SES | 1,000 emails | $0.10 |
 | Cognito | 50 MAU | $0.28 |
 | Amplify | Hosting | $1.00 |
+| API Gateway | 1,000 requests | $0.04 |
 | CloudWatch | Logs | $0.08 |
-| **Total** | | **~$3.86/season** |
+| **Total** | | **~$3.99/season** |
 
-*Costs scale linearly with client count. 500 clients ≈ $38.60/season.*
+*Costs scale linearly with client count. 500 clients ≈ $39.90/season.*
 
 ## Architecture Diagram
 
