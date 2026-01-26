@@ -697,6 +697,21 @@ export class BackendStack extends cdk.NestedStack {
       authorizationType: apigateway.AuthorizationType.NONE,  // Token-based auth in Lambda
     })
 
+    // Create /documents/{clientId}/{documentType} resource for downloads (Cognito auth)
+    const documentsResource = api.root.addResource("documents")
+    const clientIdParam = documentsResource.addResource("{clientId}")
+    const docTypeParam = clientIdParam.addResource("{documentType}")
+    
+    docTypeParam.addMethod("GET", new apigateway.LambdaIntegration(uploadManagerLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      requestParameters: {
+        'method.request.path.clientId': true,
+        'method.request.path.documentType': true,
+        'method.request.querystring.tax_year': false
+      }
+    })
+
     // Create /clients resource and GET method (Cognito auth required)
     // This endpoint is used by the dashboard to fetch all clients
     const clientsResource = api.root.addResource("clients")

@@ -194,15 +194,38 @@ def build_client_status(client: Dict[str, Any], settings: Dict[str, Any]) -> Dic
         next_followup_date=followup_status['next_followup_date']
     )
     
+    # Get detailed document list with received status
+    table = dynamodb.Table(DOCUMENTS_TABLE)
+    try:
+        doc_response = table.query(
+            KeyConditionExpression=Key('client_id').eq(client_id)
+        )
+        required_docs = [
+            {
+                'type': d['document_type'],
+                'source': d.get('source', 'Unknown'),
+                'received': d.get('received', False),
+                'received_date': d.get('received_date'),
+                'file_path': d.get('file_path')
+            }
+            for d in doc_response.get('Items', [])
+            if d.get('required', False)
+        ]
+    except ClientError as e:
+        logger.error(f"Error getting required documents: {e}")
+        required_docs = []
+    
     return {
         'client_id': client_id,
         'client_name': client.get('client_name', 'Unknown'),
         'email': client.get('email', ''),
+        'phone': client.get('phone'),
         'status': status,
         'completion_percentage': doc_status['completion_percentage'],
         'total_required': doc_status['total_required'],
         'total_received': doc_status['total_received'],
         'missing_documents': doc_status['missing_documents'],
+        'required_documents': required_docs,  # Add detailed document list
         'followup_count': followup_status['followup_count'],
         'last_followup': followup_status['last_followup'],
         'last_followup_date': followup_status['last_followup_date'],
@@ -234,8 +257,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Use sub (user ID) as accountant_id if not provided
                 accountant_id = claims.get('sub', 'acc_test_001')  # Default for testing
             
-            client_id = query_params.get('client_id', 'all')
-            status_filter = query_params.get('filter', 'all')
+            client_id = query_params.get('client_id') or 'all'  # Ensure we get 'all' if None
+            status_filter = query_params.get('filter') or 'all'
+            
+            logger.info(f"API Gateway - Query params: {query_params}")
+            logger.info(f"API Gateway - client_id: '{client_id}', type: {type(client_id)}, equals 'all': {client_id == 'all'}")
             
         else:
             # AgentCore Gateway tool event
@@ -254,16 +280,21 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not accountant_id:
             raise ValueError("Missing required parameter: accountant_id")
         
+        logger.info(f"Accountant ID: {accountant_id}, Client ID: {client_id}, Filter: {status_filter}")
+        
         settings = {'escalation_threshold': 3, 'escalation_days': 2}
         
         if client_id == 'all':
+            logger.info("Fetching all clients")
             clients = get_all_clients(accountant_id)
         else:
+            logger.info(f"Fetching specific client: {client_id}")
             table = dynamodb.Table(CLIENTS_TABLE)
             response = table.get_item(Key={'client_id': client_id})
             if 'Item' not in response:
                 raise ValueError(f"Client not found: {client_id}")
             clients = [response['Item']]
+            logger.info(f"Found client: {clients[0].get('client_name')}")
         
         client_statuses = []
         for client in clients:

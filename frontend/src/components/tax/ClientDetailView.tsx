@@ -47,6 +47,7 @@ export function ClientDetailView({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('ClientDetailView mounted with clientId:', clientId);
     if (auth.isAuthenticated) {
       fetchClientDetails();
     }
@@ -82,8 +83,12 @@ export function ClientDetailView({
       }
       
       const data = await response.json();
+      console.log('Client detail response:', data);  // Debug
+      
       if (data.clients && data.clients.length > 0) {
-        const clientData = data.clients[0];
+        // Find the specific client by ID (don't just take first one)
+        const clientData = data.clients.find((c: any) => c.client_id === clientId) || data.clients[0];
+        console.log('Selected client data:', clientData);
         setClient(clientData);
         
         // Transform required_documents to Document format
@@ -92,6 +97,7 @@ export function ClientDetailView({
           source: doc.source,
           received: doc.received
         })) || [];
+        console.log('Transformed documents:', docs);
         setDocuments(docs);
       } else {
         throw new Error('Client not found');
@@ -102,6 +108,48 @@ export function ClientDetailView({
       setError(err instanceof Error ? err.message : 'Failed to load client details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadDocument = async (documentType: string) => {
+    try {
+      // Load config
+      const configResponse = await fetch('/aws-exports.json');
+      const config = await configResponse.json();
+      const apiUrl = config.feedbackApiUrl;
+      
+      // Get ID token
+      const idToken = auth.user?.id_token;
+      
+      if (!idToken) {
+        alert('Not authenticated');
+        return;
+      }
+      
+      // Request download URL
+      const response = await fetch(
+        `${apiUrl}documents/${clientId}/${encodeURIComponent(documentType)}?tax_year=2024`,
+        {
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to get download URL');
+      }
+      
+      const data = await response.json();
+      
+      // Open download URL in new tab
+      window.open(data.download_url, '_blank');
+      
+    } catch (err) {
+      console.error('Error downloading document:', err);
+      alert(err instanceof Error ? err.message : 'Failed to download document');
     }
   };
 
@@ -255,8 +303,19 @@ export function ClientDetailView({
                     <div className="text-sm text-gray-500">{doc.source}</div>
                   </div>
                 </div>
-                <div className="text-sm text-gray-500">
-                  {doc.received ? 'Received' : 'Missing'}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">
+                    {doc.received ? 'Received' : 'Missing'}
+                  </span>
+                  {doc.received && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDownloadDocument(doc.type)}
+                    >
+                      Download
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}

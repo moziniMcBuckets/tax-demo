@@ -169,20 +169,169 @@ def generate_presigned_url(
         raise
 
 
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+def generate_download_url(
+    client_id: str,
+    client_name: str,
+    document_type: str,
+    tax_year: int
+) -> Dict[str, Any]:
     """
-    Lambda handler for generating upload URLs.
+    Generate presigned URL for downloading a document from S3.
     
     Args:
-        event: API Gateway event with client_id, filename, document_type
+        client_id: Client identifier
+        client_name: Client full name
+        document_type: Type of document to download
+        tax_year: Tax year
+    
+    Returns:
+        Dictionary with presigned download URL and metadata
+    """
+    # Create folder name from client name
+    name_parts = client_name.strip().split()
+    if len(name_parts) >= 2:
+        first_name = '_'.join(name_parts[:-1])
+        last_name = name_parts[-1]
+        folder_name = f"{last_name}_{first_name}_{tax_year}"
+    else:
+        folder_name = f"{client_name.replace(' ', '_')}_{tax_year}"
+    
+    folder_name = ''.join(c for c in folder_name if c.isalnum() or c in '_-')
+    prefix = f"{folder_name}/"
+    
+    try:
+        # List objects to find the document
+        response = s3.list_objects_v2(
+            Bucket=CLIENT_BUCKET,
+            Prefix=prefix
+        )
+        
+        if 'Contents' not in response:
+            raise ValueError(f"No documents found for client {client_id}")
+        
+        # Find document matching the type
+        matching_file = None
+        for obj in response['Contents']:
+            key = obj['Key']
+            if key.endswith('/'):
+                continue
+            
+            # Get metadata to check document type
+            head_response = s3.head_object(Bucket=CLIENT_BUCKET, Key=key)
+            metadata = head_response.get('Metadata', {})
+            
+            if metadata.get('document-type') == document_type:
+                matching_file = key
+                break
+        
+        if not matching_file:
+            raise ValueError(f"Document type '{document_type}' not found for client")
+        
+        # Generate presigned download URL (valid for 15 minutes)
+        download_url = s3.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': CLIENT_BUCKET,
+                'Key': matching_file,
+            },
+            ExpiresIn=900  # 15 minutes
+        )
+        
+        filename = matching_file.split('/')[-1]
+        
+        logger.info(f"Generated download URL for {client_id}/{document_type}")
+        
+        return {
+            'download_url': download_url,
+            's3_key': matching_file,
+            'filename': filename,
+            'document_type': document_type,
+            'expires_in': 900,
+        }
+        
+    except ClientError as e:
+        logger.error(f"Error generating download URL: {e}")
+        raise
+
+
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Lambda handler for generating upload and download URLs.
+    Handles both API Gateway requests and Gateway tool calls.
+    
+    Args:
+        event: API Gateway event or Gateway tool event
         context: Lambda context
     
     Returns:
         API Gateway response with presigned URL
     """
     try:
-        logger.info(f"Upload URL request: {json.dumps(event)}")
+        logger.info(f"Upload/Download URL request: {json.dumps(event)}")
         
+        # Detect request type: API Gateway GET (download) or POST (upload)
+        is_api_gateway = 'httpMethod' in event
+        
+        if is_api_gateway and event['httpMethod'] == 'GET':
+            # Handle download request from API Gateway
+            path_params = event.get('pathParameters') or {}
+            query_params = event.get('queryStringParameters') or {}
+            
+            client_id = path_params.get('clientId')
+            document_type = path_params.get('documentType')
+            tax_year = int(query_params.get('tax_year', datetime.now().year))
+            
+            if not client_id or not document_type:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                    },
+                    'body': json.dumps({
+                        'error': 'Missing required parameters: clientId, documentType'
+                    })
+                }
+            
+            # Get client info
+            table = dynamodb.Table(CLIENTS_TABLE)
+            client_response = table.get_item(Key={'client_id': client_id})
+            if 'Item' not in client_response:
+                return {
+                    'statusCode': 404,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                    },
+                    'body': json.dumps({'error': 'Client not found'})
+                }
+            
+            client_name = client_response['Item'].get('client_name', 'Unknown_Client')
+            
+            # Generate download URL
+            result = generate_download_url(
+                client_id=client_id,
+                client_name=client_name,
+                document_type=document_type,
+                tax_year=tax_year
+            )
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                },
+                'body': json.dumps({
+                    'success': True,
+                    'download_url': result['download_url'],
+                    'filename': result['filename'],
+                    'document_type': result['document_type'],
+                    'expires_in': result['expires_in']
+                })
+            }
+        
+        # Handle upload request (existing logic)
         # Parse request body
         body = json.loads(event.get('body', '{}'))
         

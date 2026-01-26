@@ -68,8 +68,13 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
         throw new Error('Not authenticated');
       }
       
-      // Fetch clients from API
-      const response = await fetch(`${apiUrl}clients?accountant_id=acc_test_001`, {
+      // Fetch ALL clients from API (explicitly no client_id parameter)
+      const url = new URL(`${apiUrl}clients`);
+      url.searchParams.set('accountant_id', 'acc_test_001');
+      url.searchParams.set('filter', 'all');
+      // Explicitly do NOT set client_id
+      
+      const response = await fetch(url.toString(), {
         headers: {
           'Authorization': `Bearer ${idToken}`,
           'Content-Type': 'application/json'
@@ -81,6 +86,7 @@ export function ClientDashboard({ onClientSelect, onRefresh }: ClientDashboardPr
       }
       
       const data = await response.json();
+      console.log('Fetched clients:', data);  // Debug log
       setClients(data.clients || []);
       setSummary(data.summary || null);
       

@@ -5,6 +5,7 @@ import ChatInterface from "@/components/chat/ChatInterface"
 import { ClientDashboard } from "@/components/tax/ClientDashboard"
 import { ClientDetailView } from "@/components/tax/ClientDetailView"
 import { ClientUploadPortal } from "@/components/tax/ClientUploadPortal"
+import { DebugPanel } from "@/components/tax/DebugPanel"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
 import { GlobalContextProvider } from "@/app/context/GlobalContext"
@@ -35,6 +36,10 @@ export default function ChatPage() {
   const handleBackToDashboard = () => {
     setShowDetailView(false)
     setSelectedClientId(null)
+    // Force dashboard to refresh when returning
+    setTimeout(() => {
+      window.dispatchEvent(new Event('dashboard-refresh'))
+    }, 100)
   }
 
   const handleRefresh = () => {
@@ -57,7 +62,15 @@ export default function ChatPage() {
           </Button>
           <Button
             variant={currentView === 'dashboard' ? 'default' : 'outline'}
-            onClick={() => setCurrentView('dashboard')}
+            onClick={() => {
+              setCurrentView('dashboard')
+              setShowDetailView(false)
+              setSelectedClientId(null)
+              // Clear any URL parameters
+              if (typeof window !== 'undefined') {
+                window.history.replaceState({}, '', window.location.pathname)
+              }
+            }}
             className="flex items-center gap-2"
           >
             <LayoutDashboard className="w-4 h-4" />
@@ -78,6 +91,7 @@ export default function ChatPage() {
           {currentView === 'chat' && <ChatInterface />}
           {currentView === 'dashboard' && !showDetailView && (
             <ClientDashboard 
+              key="dashboard-list"
               onClientSelect={handleClientSelect}
               onRefresh={handleRefresh}
             />
@@ -101,6 +115,13 @@ export default function ChatPage() {
             />
           )}
         </div>
+
+        {/* Debug Panel */}
+        <DebugPanel 
+          selectedClientId={selectedClientId}
+          showDetailView={showDetailView}
+          currentView={currentView}
+        />
       </div>
     </GlobalContextProvider>
   )
