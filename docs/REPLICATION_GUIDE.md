@@ -18,6 +18,7 @@ This guide provides step-by-step instructions to deploy the Tax Document Agent t
 - S3 with event notifications
 - Usage tracking for billing
 - Client selection UI with personalized reminder timing
+- SMS notifications via Amazon SNS (requires production access)
 
 ---
 
@@ -954,6 +955,7 @@ Print this and check off as you go:
 
 ### Feature Documentation
 - [Client Selection with Reminder Timing](CLIENT_SELECTION_FEATURE.md) - Send upload links with personalized reminder schedules
+- [SMS Notifications](SMS_NOTIFICATIONS.md) - SMS capability via Amazon SNS (requires production access)
 - [Gateway Tools](GATEWAY.md) - Complete guide to AgentCore Gateway tools
 - [Memory Integration](MEMORY_INTEGRATION.md) - Using AgentCore Memory for client context
 - [Streaming Responses](STREAMING.md) - Real-time agent responses
