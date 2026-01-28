@@ -31,6 +31,7 @@ logger.setLevel(logging.INFO)
 dynamodb = boto3.resource('dynamodb')
 s3 = boto3.client('s3')
 ses = boto3.client('ses')
+sns = boto3.client('sns')
 
 # Environment variables
 CLIENTS_TABLE = os.environ['CLIENTS_TABLE']
@@ -38,6 +39,7 @@ DOCUMENTS_TABLE = os.environ['DOCUMENTS_TABLE']
 FOLLOWUPS_TABLE = os.environ['FOLLOWUPS_TABLE']
 CLIENT_BUCKET = os.environ['CLIENT_BUCKET']
 SES_FROM_EMAIL = os.environ['SES_FROM_EMAIL']
+SMS_SENDER_ID = os.environ.get('SMS_SENDER_ID', 'YourFirm')
 USAGE_TABLE = os.environ.get('USAGE_TABLE', '')
 
 
@@ -57,6 +59,7 @@ def track_usage(accountant_id: str, operation: str, resource_type: str, quantity
         # Pricing
         pricing = {
             'email_sent': 0.0001,
+            'sms_sent': 0.00645,
             'agent_invocation': 0.003,
             'gateway_call': 0.0001,
         }
@@ -196,34 +199,38 @@ Your Accountant
 
 def send_upload_link_to_client(client_id: str, options: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Send upload link to a single client by generating token and calling SES.
+    Send upload link to a single client by generating token and calling SES/SNS.
     
     Args:
         client_id: Client identifier
-        options: Operation options (days_valid, custom_message, reminder_preferences, etc.)
+        options: Operation options (days_valid, custom_message, reminder_preferences, send_via, etc.)
     
     Returns:
         Result dictionary with success status
     """
     import secrets
     from datetime import datetime, timedelta
+    import re
     
     client_info = get_client_info(client_id)
     client_name = client_info.get('client_name', 'Unknown')
     client_email = client_info.get('email')
+    client_phone = client_info.get('phone')
+    sms_enabled = client_info.get('sms_enabled', False)
     
-    if not client_email:
+    if not client_email and not (client_phone and sms_enabled):
         return {
             'client_id': client_id,
             'client_name': client_name,
             'success': False,
-            'error': 'No email address on file'
+            'error': 'No email or SMS contact information'
         }
     
     try:
         days_valid = options.get('days_valid', 30)
         custom_message = options.get('custom_message')
         reminder_preferences = options.get('reminder_preferences')
+        send_via = options.get('send_via', 'both')
         
         # Generate upload token
         upload_token = secrets.token_urlsafe(32)
@@ -253,9 +260,13 @@ def send_upload_link_to_client(client_id: str, options: Dict[str, Any]) -> Dict[
         frontend_url = os.environ.get('FRONTEND_URL', 'https://main.d3tseyzyms135a.amplifyapp.com')
         upload_url = f"{frontend_url}/upload/?client={client_id}&token={upload_token}"
         
-        # Create email
-        subject = f"Secure Link to Upload Your 2026 Tax Documents"
-        body = f"""Dear {client_name},
+        sent_channels = []
+        
+        # Send email if requested and available
+        if send_via in ['email', 'both'] and client_email:
+            try:
+                subject = f"Secure Link to Upload Your 2026 Tax Documents"
+                body = f"""Dear {client_name},
 
 Please upload your tax documents using this secure link:
 
@@ -264,40 +275,101 @@ Please upload your tax documents using this secure link:
 This link is valid for {days_valid} days and is unique to you. No login is required.
 
 """
-        
-        # Add custom message if provided
-        if custom_message:
-            body += f"{custom_message}\n\n"
-        
-        body += """Thank you,
+                
+                # Add custom message if provided
+                if custom_message:
+                    body += f"{custom_message}\n\n"
+                
+                body += """Thank you,
 Your Accountant
 """
+                
+                # Send via SES
+                ses.send_email(
+                    Source=SES_FROM_EMAIL,
+                    Destination={'ToAddresses': [client_email]},
+                    Message={
+                        'Subject': {'Data': subject},
+                        'Body': {'Text': {'Data': body}}
+                    }
+                )
+                
+                sent_channels.append('email')
+                
+                # Track email usage
+                track_usage(
+                    accountant_id=client_info.get('accountant_id', 'unknown'),
+                    operation='send_upload_link',
+                    resource_type='email_sent',
+                    quantity=1
+                )
+            except Exception as e:
+                logger.error(f"Failed to send email to {client_id}: {e}")
         
-        # Send via SES
-        ses.send_email(
-            Source=SES_FROM_EMAIL,
-            Destination={'ToAddresses': [client_email]},
-            Message={
-                'Subject': {'Data': subject},
-                'Body': {'Text': {'Data': body}}
+        # Send SMS if requested, enabled, and available
+        if send_via in ['sms', 'both'] and client_phone and sms_enabled:
+            try:
+                # Validate phone number
+                if re.match(r'^\+1[2-9]\d{9}$', client_phone):
+                    # Check sending time (8 AM - 8 PM)
+                    current_hour = datetime.utcnow().hour
+                    if 13 <= current_hour or current_hour < 4:
+                        # Create SMS message
+                        first_name = client_name.split()[0] if client_name else 'there'
+                        sms_message = f"Hi {first_name}, upload your tax docs: {upload_url} (valid {days_valid}d). Reply STOP to opt out."
+                        
+                        # Truncate if needed
+                        if len(sms_message) > 160:
+                            sms_message = sms_message[:157] + '...'
+                        
+                        # Send via SNS
+                        sns.publish(
+                            PhoneNumber=client_phone,
+                            Message=sms_message,
+                            MessageAttributes={
+                                'AWS.SNS.SMS.SMSType': {
+                                    'DataType': 'String',
+                                    'StringValue': 'Transactional'
+                                },
+                                'AWS.SNS.SMS.SenderID': {
+                                    'DataType': 'String',
+                                    'StringValue': SMS_SENDER_ID[:11]
+                                }
+                            }
+                        )
+                        
+                        sent_channels.append('sms')
+                        
+                        # Track SMS usage
+                        track_usage(
+                            accountant_id=client_info.get('accountant_id', 'unknown'),
+                            operation='send_upload_link',
+                            resource_type='sms_sent',
+                            quantity=1
+                        )
+                    else:
+                        logger.warning(f"Outside SMS sending hours for {client_id}")
+                else:
+                    logger.warning(f"Invalid phone number for {client_id}: {client_phone}")
+            except Exception as e:
+                logger.error(f"Failed to send SMS to {client_id}: {e}")
+        
+        if not sent_channels:
+            return {
+                'client_id': client_id,
+                'client_name': client_name,
+                'success': False,
+                'error': 'Failed to send via any channel'
             }
-        )
         
-        logger.info(f"Sent upload link to {client_name} ({client_email})")
-        
-        # Track usage
-        track_usage(
-            accountant_id=client_info.get('accountant_id', 'unknown'),
-            operation='send_upload_link',
-            resource_type='email_sent',
-            quantity=1
-        )
+        logger.info(f"Sent upload link to {client_name} via {', '.join(sent_channels)}")
         
         return {
             'client_id': client_id,
             'client_name': client_name,
             'success': True,
-            'message': f'Upload link sent to {client_email}'
+            'channels': sent_channels,
+            'message': f'Upload link sent via {", ".join(sent_channels)}'
         }
     except Exception as e:
         logger.error(f"Error sending upload link to {client_id}: {e}")

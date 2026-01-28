@@ -57,6 +57,7 @@ def create_client(client_data: Dict[str, Any]) -> Dict[str, Any]:
         'client_name': client_data['client_name'],
         'email': client_data['email'],
         'phone': client_data.get('phone', ''),
+        'sms_enabled': client_data.get('sms_enabled', False),
         'client_type': client_data.get('client_type', 'individual'),
         'notes': client_data.get('notes', ''),
         'accountant_id': client_data['accountant_id'],  # From JWT

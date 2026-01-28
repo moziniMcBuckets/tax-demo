@@ -685,6 +685,7 @@ export class BackendStack extends cdk.NestedStack {
         FOLLOWUPS_TABLE: `${config.stack_name_base}-followups`,
         CLIENT_BUCKET: `${config.stack_name_base}-client-docs-${this.account}`,
         SES_FROM_EMAIL: 'mhamuzn@amazon.com',
+        SMS_SENDER_ID: 'YourFirm',
         FRONTEND_URL: frontendUrl,
         USAGE_TABLE: `${config.stack_name_base}-usage`,
         CORS_ALLOWED_ORIGINS: `${frontendUrl},http://localhost:3000`,
@@ -780,6 +781,14 @@ export class BackendStack extends cdk.NestedStack {
     batchOpsLambda.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+        resources: ['*']
+      })
+    );
+
+    // Add SNS permissions for SMS notifications
+    batchOpsLambda.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['sns:Publish', 'sns:SetSMSAttributes', 'sns:GetSMSAttributes'],
         resources: ['*']
       })
     );
@@ -1000,6 +1009,7 @@ export class BackendStack extends cdk.NestedStack {
           CLIENTS_TABLE: clientsTableName, 
           FOLLOWUP_TABLE: followupsTableName, 
           SES_FROM_EMAIL: sesFromEmail,
+          SMS_SENDER_ID: 'YourFirm',
           FRONTEND_URL: frontendUrl
         },
         targetName: "send-link",  // SHORT name (9 chars)
@@ -1038,6 +1048,16 @@ export class BackendStack extends cdk.NestedStack {
         })
       );
     });
+
+    // Grant send_upload_link Lambda SNS permissions for SMS
+    if (this.taxLambdaFunctions['TaxSendLink']) {
+      this.taxLambdaFunctions['TaxSendLink'].addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['sns:Publish', 'sns:SetSMSAttributes', 'sns:GetSMSAttributes'],
+          resources: ['*']
+        })
+      );
+    }
 
     // Create comprehensive IAM role for gateway
     const gatewayRole = new iam.Role(this, "GatewayRole", {

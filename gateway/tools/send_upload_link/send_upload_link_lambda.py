@@ -22,12 +22,14 @@ logger.setLevel(logging.INFO)
 
 # Initialize AWS clients
 ses = boto3.client('ses')
+sns = boto3.client('sns')
 dynamodb = boto3.resource('dynamodb')
 
 # Environment variables
 CLIENTS_TABLE = os.environ['CLIENTS_TABLE']
 FOLLOWUP_TABLE = os.environ['FOLLOWUP_TABLE']
 SES_FROM_EMAIL = os.environ['SES_FROM_EMAIL']
+SMS_SENDER_ID = os.environ.get('SMS_SENDER_ID', 'YourFirm')
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://yourdomain.com')
 USAGE_TABLE = os.environ.get('USAGE_TABLE', '')
 
@@ -45,7 +47,7 @@ def track_usage(accountant_id: str, operation: str, resource_type: str, quantity
         timestamp = datetime.utcnow().isoformat()
         month = timestamp[:7]
         
-        pricing = {'email_sent': 0.0001}
+        pricing = {'email_sent': 0.0001, 'sms_sent': 0.00645}
         unit_cost = pricing.get(resource_type, 0.0)
         estimated_cost = unit_cost * quantity
         
@@ -263,6 +265,92 @@ def send_email_via_ses(
         raise
 
 
+def send_sms_via_sns(
+    phone_number: str,
+    message: str
+) -> Optional[str]:
+    """
+    Send SMS via AWS SNS.
+    
+    Args:
+        phone_number: E.164 format phone number (+12065551234)
+        message: SMS text content (max 160 chars)
+    
+    Returns:
+        SNS message ID if successful, None if failed
+    """
+    try:
+        # Validate phone number format
+        import re
+        if not re.match(r'^\+1[2-9]\d{9}$', phone_number):
+            logger.error(f"Invalid phone number format: {phone_number}")
+            return None
+        
+        # Check if within allowed sending hours (8 AM - 8 PM)
+        current_hour = datetime.utcnow().hour
+        # Allow 13:00 UTC - 03:59 UTC (covers all US timezones 8 AM - 8 PM)
+        if not (13 <= current_hour or current_hour < 4):
+            logger.warning(f"Outside allowed SMS hours. Current UTC hour: {current_hour}")
+            return None
+        
+        # Truncate message if too long
+        if len(message) > 160:
+            message = message[:157] + '...'
+        
+        # Send SMS
+        response = sns.publish(
+            PhoneNumber=phone_number,
+            Message=message,
+            MessageAttributes={
+                'AWS.SNS.SMS.SMSType': {
+                    'DataType': 'String',
+                    'StringValue': 'Transactional'
+                },
+                'AWS.SNS.SMS.SenderID': {
+                    'DataType': 'String',
+                    'StringValue': SMS_SENDER_ID[:11]
+                }
+            }
+        )
+        message_id = response['MessageId']
+        logger.info(f"SMS sent successfully: {message_id} to {phone_number}")
+        return message_id
+    except ClientError as e:
+        logger.error(f"Error sending SMS via SNS: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error sending SMS: {e}")
+        return None
+
+
+def create_sms_message(
+    client_name: str,
+    upload_url: str,
+    days_valid: int
+) -> str:
+    """
+    Create concise SMS message for upload link.
+    
+    Args:
+        client_name: Client's name
+        upload_url: Upload portal URL
+        days_valid: Number of days link is valid
+    
+    Returns:
+        Formatted SMS message (max 160 chars)
+    """
+    # Use first name only to save characters
+    first_name = client_name.split()[0] if client_name else 'there'
+    
+    message = f"Hi {first_name}, upload your tax docs: {upload_url} (valid {days_valid}d). Reply STOP to opt out."
+    
+    # Ensure within 160 char limit
+    if len(message) > 160:
+        message = message[:157] + '...'
+    
+    return message
+
+
 def log_upload_link_sent(
     client_id: str,
     upload_token: str,
@@ -338,6 +426,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         days_valid = event.get('days_valid', 30)
         custom_message = event.get('custom_message')
         reminder_preferences = event.get('reminder_preferences')
+        send_via = event.get('send_via', 'both')  # 'email', 'sms', or 'both'
         
         # Validate required parameters
         if not client_id:
@@ -350,10 +439,12 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Get client information
         client_info = get_client_info(client_id)
         client_email = client_info.get('email')
+        client_phone = client_info.get('phone')
+        sms_enabled = client_info.get('sms_enabled', False)
         accountant_id = client_info.get('accountant_id', 'unknown')
         
-        if not client_email:
-            raise ValueError(f"Client {client_id} has no email address on file")
+        if not client_email and not (client_phone and sms_enabled):
+            raise ValueError(f"Client {client_id} has no email or SMS contact information")
         
         # Generate upload token
         upload_token, token_expires = generate_upload_token(
@@ -365,33 +456,67 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Generate upload URL
         upload_url = generate_upload_url(client_id, upload_token)
         
-        # Create email body
-        email_subject = f"Secure Link to Upload Your {client_info.get('tax_year', datetime.now().year)} Tax Documents"
-        email_body = create_email_body(client_info, upload_url, days_valid, custom_message)
+        # Track what was sent
+        sent_channels = []
+        message_ids = {}
         
-        # Send email via SES
-        message_id = send_email_via_ses(
-            to_email=client_email,
-            subject=email_subject,
-            body=email_body
-        )
+        # Send email if requested and available
+        if send_via in ['email', 'both'] and client_email:
+            try:
+                email_subject = f"Secure Link to Upload Your {client_info.get('tax_year', datetime.now().year)} Tax Documents"
+                email_body = create_email_body(client_info, upload_url, days_valid, custom_message)
+                email_id = send_email_via_ses(
+                    to_email=client_email,
+                    subject=email_subject,
+                    body=email_body
+                )
+                message_ids['email'] = email_id
+                sent_channels.append('email')
+                
+                # Track email usage
+                track_usage(
+                    accountant_id=accountant_id,
+                    operation='send_upload_link',
+                    resource_type='email_sent',
+                    quantity=1
+                )
+            except Exception as e:
+                logger.error(f"Failed to send email: {e}")
+        
+        # Send SMS if requested, enabled, and available
+        if send_via in ['sms', 'both'] and client_phone and sms_enabled:
+            try:
+                sms_message = create_sms_message(
+                    client_name=client_info.get('client_name', 'Client'),
+                    upload_url=upload_url,
+                    days_valid=days_valid
+                )
+                sms_id = send_sms_via_sns(client_phone, sms_message)
+                if sms_id:
+                    message_ids['sms'] = sms_id
+                    sent_channels.append('sms')
+                    
+                    # Track SMS usage
+                    track_usage(
+                        accountant_id=accountant_id,
+                        operation='send_upload_link',
+                        resource_type='sms_sent',
+                        quantity=1
+                    )
+            except Exception as e:
+                logger.error(f"Failed to send SMS: {e}")
+        
+        if not sent_channels:
+            raise ValueError("Failed to send notification via any channel")
         
         # Log to DynamoDB
         log_id = log_upload_link_sent(
             client_id=client_id,
             upload_token=upload_token,
             token_expires=token_expires,
-            message_id=message_id,
-            recipient_email=client_email,
+            message_id=message_ids.get('email', 'N/A'),
+            recipient_email=client_email or 'N/A',
             accountant_id=accountant_id
-        )
-        
-        # Track usage for billing
-        track_usage(
-            accountant_id=accountant_id,
-            operation='send_upload_link',
-            resource_type='email_sent',
-            quantity=1
         )
         
         # Prepare response
@@ -400,16 +525,18 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'upload_link_sent': True,
             'client_id': client_id,
             'client_name': client_info.get('client_name'),
-            'recipient': client_email,
+            'channels': sent_channels,
+            'recipient_email': client_email if 'email' in sent_channels else None,
+            'recipient_phone': client_phone if 'sms' in sent_channels else None,
             'upload_url': upload_url,
             'token_expires': token_expires[:10],  # Just the date
             'days_valid': days_valid,
             'sent_at': datetime.utcnow().isoformat(),
-            'message_id': message_id,
+            'message_ids': message_ids,
             'log_id': log_id
         }
         
-        logger.info(f"Upload link sent successfully to {client_email}")
+        logger.info(f"Upload link sent successfully via {', '.join(sent_channels)}")
         
         # Return in Gateway format
         return {
