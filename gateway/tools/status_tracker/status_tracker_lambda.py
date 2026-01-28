@@ -38,7 +38,7 @@ def get_all_clients(accountant_id: str) -> List[Dict[str, Any]]:
     table = dynamodb.Table(CLIENTS_TABLE)
     try:
         response = table.query(
-            IndexName='accountant-index',
+            IndexName='accountant_id-index',
             KeyConditionExpression=Key('accountant_id').eq(accountant_id)
         )
         return response.get('Items', [])
