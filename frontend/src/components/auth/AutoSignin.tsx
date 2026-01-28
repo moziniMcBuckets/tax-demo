@@ -7,8 +7,16 @@ import { Button } from "@/components/ui/button"
 function AutoSigninContent({ children }: PropsWithChildren) {
   const auth = useAuth()
 
-  if (auth.isLoading) {
+  // Check if we're on the public upload page
+  const isUploadPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/upload');
+
+  if (auth.isLoading && !isUploadPage) {
     return <div className="flex items-center justify-center min-h-screen text-xl">Loading...</div>
+  }
+
+  // Allow upload page without authentication
+  if (isUploadPage) {
+    return <>{children}</>
   }
 
   if (!auth.isAuthenticated) {

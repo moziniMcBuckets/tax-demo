@@ -933,7 +933,7 @@ export class BackendStack extends cdk.NestedStack {
     const settingsTableName = `${config.stack_name_base}-settings`;
     const clientBucketName = `${config.stack_name_base}-client-docs-${this.account}`;
     const snsTopicArn = `arn:aws:sns:${this.region}:${this.account}:${config.stack_name_base}-escalations`;
-    const sesFromEmail = `noreply@${config.stack_name_base}.example.com`;
+    const sesFromEmail = `mhamuzn@amazon.com`;  // Use verified email
 
     // Create tax Lambda tools with SHORT names for Gateway targets (no sample tool)
     const taxLambdas: Array<{

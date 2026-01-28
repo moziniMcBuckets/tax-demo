@@ -200,13 +200,13 @@ def send_upload_link_to_client(client_id: str, options: Dict[str, Any]) -> Dict[
     
     Args:
         client_id: Client identifier
-        options: Operation options (days_valid, custom_message, etc.)
+        options: Operation options (days_valid, custom_message, reminder_preferences, etc.)
     
     Returns:
         Result dictionary with success status
     """
     import secrets
-    from datetime import datetime, timedelta, timedelta
+    from datetime import datetime, timedelta
     
     client_info = get_client_info(client_id)
     client_name = client_info.get('client_name', 'Unknown')
@@ -222,20 +222,31 @@ def send_upload_link_to_client(client_id: str, options: Dict[str, Any]) -> Dict[
     
     try:
         days_valid = options.get('days_valid', 30)
+        custom_message = options.get('custom_message')
+        reminder_preferences = options.get('reminder_preferences')
         
         # Generate upload token
         upload_token = secrets.token_urlsafe(32)
         token_expires = (datetime.utcnow() + timedelta(days=days_valid)).isoformat()
         
-        # Update client record
+        # Update client record with token and optional reminder preferences
         clients_table = dynamodb.Table(CLIENTS_TABLE)
+        
+        update_expression = 'SET upload_token = :token, token_expires = :expires'
+        expression_values = {
+            ':token': upload_token,
+            ':expires': token_expires
+        }
+        
+        # Add reminder preferences if provided
+        if reminder_preferences:
+            update_expression += ', reminder_preferences = :prefs'
+            expression_values[':prefs'] = reminder_preferences
+        
         clients_table.update_item(
             Key={'client_id': client_id},
-            UpdateExpression='SET upload_token = :token, token_expires = :expires',
-            ExpressionAttributeValues={
-                ':token': upload_token,
-                ':expires': token_expires
-            }
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values
         )
         
         # Generate upload URL
@@ -252,7 +263,13 @@ Please upload your tax documents using this secure link:
 
 This link is valid for {days_valid} days and is unique to you. No login is required.
 
-Thank you,
+"""
+        
+        # Add custom message if provided
+        if custom_message:
+            body += f"{custom_message}\n\n"
+        
+        body += """Thank you,
 Your Accountant
 """
         

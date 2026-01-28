@@ -6,6 +6,7 @@ import { ClientDashboard } from "@/components/tax/ClientDashboard"
 import { ClientDetailView } from "@/components/tax/ClientDetailView"
 import { ClientUploadPortal } from "@/components/tax/ClientUploadPortal"
 import { NewClientIntake } from "@/components/tax/NewClientIntake"
+import { SendUploadLinkForm } from "@/components/tax/SendUploadLinkForm"
 import { DebugPanel } from "@/components/tax/DebugPanel"
 import { AuthForms } from "@/components/auth/AuthForms"
 import { Button } from "@/components/ui/button"
@@ -112,11 +113,7 @@ export default function ChatPage() {
             </div>
           )}
           {currentView === 'upload' && (
-            <ClientUploadPortal
-              clientId="test-client-id"
-              uploadToken="test-token"
-              apiUrl="https://api.example.com"
-            />
+            <SendUploadLinkForm />
           )}
           {currentView === 'newClient' && (
             <NewClientIntake 

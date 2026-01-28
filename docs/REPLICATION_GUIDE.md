@@ -17,6 +17,7 @@ This guide provides step-by-step instructions to deploy the Tax Document Agent t
 - Cognito with self-service sign-up
 - S3 with event notifications
 - Usage tracking for billing
+- Client selection UI with personalized reminder timing
 
 ---
 
@@ -637,11 +638,19 @@ Which clients are at risk?
 - Color-coded status indicators
 - Filter and search working
 
-### 14.5 Test Upload Portal
+### 14.5 Test Upload Documents Tab
 
 - Click "Upload Documents" tab
-- Should see upload form
-- (Won't work without proper client ID/token, but UI should load)
+- Should see "Send Upload Link" form with:
+  - Client selection dropdown (populated with your clients)
+  - Link validity configuration (1-90 days)
+  - Custom message textarea
+  - Reminder schedule options (default or custom)
+- Select a client from dropdown
+- Configure settings
+- Click "Send Upload Link"
+- Should see success message
+- Client will receive email with secure upload link
 
 ---
 
@@ -941,8 +950,31 @@ Print this and check off as you go:
 
 ---
 
-**Deployment Guide Version:** 1.0
-**Last Updated:** January 25, 2026
+## Additional Documentation
+
+### Feature Documentation
+- [Client Selection with Reminder Timing](CLIENT_SELECTION_FEATURE.md) - Send upload links with personalized reminder schedules
+- [Gateway Tools](GATEWAY.md) - Complete guide to AgentCore Gateway tools
+- [Memory Integration](MEMORY_INTEGRATION.md) - Using AgentCore Memory for client context
+- [Streaming Responses](STREAMING.md) - Real-time agent responses
+- [Usage Tracking](USAGE_TRACKING_PLAN.md) - Per-tenant billing and cost tracking
+- [Feedback System](FEEDBACK_SYSTEM_IMPLEMENTATION.md) - User feedback collection
+
+### Implementation Guides
+- [CDK Implementation](CDK_IMPLEMENTATION_GUIDE.md) - Infrastructure as Code best practices
+- [Agent Configuration](AGENT_CONFIGURATION.md) - Configuring the AI agent
+- [Agent Response Optimization](AGENT_RESPONSE_OPTIMIZATION.md) - Improving agent performance
+
+### Operational Guides
+- [Deployment Guide](DEPLOYMENT.md) - Quick deployment reference
+- [Troubleshooting](TROUBLESHOOTING.md) - Common issues and solutions
+- [Sample Queries](SAMPLE_QUERIES.md) - Example agent interactions
+- [Version Bump Playbook](VERSION_BUMP_PLAYBOOK.md) - Updating dependencies
+
+---
+
+**Deployment Guide Version:** 1.1
+**Last Updated:** January 27, 2026
 **Tested On:** AWS Account (fresh deployment)
 **Status:** Production-ready
 

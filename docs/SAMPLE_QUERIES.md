@@ -668,3 +668,198 @@ If something doesn't work:
 ---
 
 **Pro Tip:** Start with simple queries and gradually increase complexity to test different aspects of the system!
+
+
+---
+
+## Client Selection UI Queries
+
+### Using the Upload Documents Tab
+
+The "Upload Documents" tab provides a user-friendly interface for sending upload links with personalized reminder timing.
+
+#### Basic Usage
+1. Navigate to "Upload Documents" tab
+2. Select client from dropdown
+3. Configure link validity (1-90 days)
+4. Optionally add custom message
+5. Click "Send Upload Link"
+
+#### With Default Reminder Schedule
+```
+Steps:
+1. Select "John Smith" from dropdown
+2. Leave reminder preferences unchecked
+3. Click "Send Upload Link"
+
+Expected: 
+- Email sent to John Smith
+- Default schedule: 7, 14, 21, 30 days
+- Success notification displayed
+```
+
+#### With Custom Reminder Schedule
+```
+Steps:
+1. Select "Jane Doe" from dropdown
+2. Check "Customize for this client"
+3. Set custom days: 5, 10, 15, 20
+4. Add custom message: "Please prioritize your W-2 and 1099 forms"
+5. Click "Send Upload Link"
+
+Expected:
+- Email sent with custom message
+- Custom schedule stored in DynamoDB
+- Success notification displayed
+```
+
+#### With Custom Message
+```
+Steps:
+1. Select "Mohamed Mohamud" from dropdown
+2. Set days valid: 45
+3. Add message: "Hi Mohamed, please upload your documents at your earliest convenience. Let me know if you have any questions!"
+4. Click "Send Upload Link"
+
+Expected:
+- Email includes custom message
+- Link valid for 45 days
+- Success notification displayed
+```
+
+---
+
+## Agent-Based Upload Link Queries
+
+The agent can still send upload links via chat commands for quick operations.
+
+### 50. Send Upload Link via Agent
+```
+Send Mohamed his upload link
+```
+**Expected:** Upload link sent to Mohamed's email with default 30-day validity
+
+### 51. Send Upload Link with Custom Validity
+```
+Send Jane an upload link valid for 60 days
+```
+**Expected:** Upload link sent with 60-day validity
+
+### 52. Send Upload Link with Custom Message
+```
+Send John his upload link and tell him to prioritize his W-2
+```
+**Expected:** Upload link sent with custom message about W-2
+
+### 53. Send Upload Link with Reminder Preferences
+```
+Send Sarah an upload link with reminders at 5, 10, and 15 days
+```
+**Expected:** Upload link sent with custom reminder schedule
+
+---
+
+## Bulk Operations via Dashboard
+
+### Using Bulk Selection
+1. Navigate to Dashboard tab
+2. Select multiple clients using checkboxes
+3. Click "Send Upload Links" button
+
+```
+Expected:
+- All selected clients receive upload links
+- Default reminder schedule applied
+- Success message shows count (e.g., "Success: 5, Failed: 0")
+```
+
+### Select All and Send
+1. Click checkbox in table header to select all
+2. Click "Send Upload Links"
+
+```
+Expected:
+- All visible clients receive links
+- Bulk operation status displayed
+- Individual results shown
+```
+
+---
+
+## Verification Queries
+
+### Check Reminder Preferences in DynamoDB
+```bash
+# Via AWS CLI
+aws dynamodb get-item \
+  --table-name tax-agent-clients \
+  --key '{"client_id":{"S":"Smith_abc123"}}' \
+  --query 'Item.reminder_preferences'
+```
+
+### Check Upload Token
+```bash
+# Via AWS CLI
+aws dynamodb get-item \
+  --table-name tax-agent-clients \
+  --key '{"client_id":{"S":"Smith_abc123"}}' \
+  --query 'Item.[upload_token,token_expires]'
+```
+
+---
+
+## Troubleshooting Queries
+
+### Client Dropdown Empty
+```
+Issue: No clients appear in dropdown
+
+Solutions:
+1. Check browser console for API errors
+2. Verify JWT token is valid (check localStorage)
+3. Confirm clients exist in DynamoDB
+4. Click refresh button to reload
+```
+
+### Upload Link Not Received
+```
+Issue: Client didn't receive email
+
+Solutions:
+1. Verify SES email is verified
+2. Check CloudWatch logs for errors
+3. Confirm client has valid email address
+4. Check spam folder
+```
+
+### Preferences Not Saving
+```
+Issue: Custom preferences not stored
+
+Solutions:
+1. Check DynamoDB permissions
+2. Verify Lambda has write access
+3. Check CloudWatch logs for errors
+4. Verify JSON format is correct
+```
+
+---
+
+## Feature Comparison
+
+### Chat Interface vs UI
+| Feature | Chat Interface | Upload Documents UI |
+|---------|---------------|---------------------|
+| Client Selection | Type name | Dropdown |
+| Link Validity | Specify in message | Input field (1-90) |
+| Custom Message | Include in message | Textarea |
+| Reminder Schedule | Specify in message | Toggle + inputs |
+| Bulk Operations | Not supported | Via Dashboard |
+| Ease of Use | Quick for single | Better for multiple |
+
+### When to Use Each
+- **Chat Interface**: Quick single operations, natural language
+- **Upload Documents UI**: Detailed configuration, visual feedback
+- **Dashboard Bulk**: Multiple clients at once
+
+---

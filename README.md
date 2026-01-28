@@ -23,6 +23,8 @@ The Tax Document Collection Agent helps accountants manage client document colle
 
 ✅ **Multi-accountant support** - Self-service sign-up, JWT-based data isolation  
 ✅ **Custom requirements** - Accountant defines what each client needs  
+✅ **Client selection UI** - Dropdown to select clients and send personalized upload links  
+✅ **Reminder timing** - Customize reminder schedule per client (7, 14, 21, 30 days default)  
 ✅ **Multi-channel interface** - Chat, dashboard, client portal  
 ✅ **Bulk operations** - Send reminders/links to multiple clients  
 ✅ **Document download** - Download individual or all documents as ZIP  

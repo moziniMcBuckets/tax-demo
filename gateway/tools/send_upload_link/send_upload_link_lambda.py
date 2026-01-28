@@ -89,13 +89,14 @@ def get_client_info(client_id: str) -> Dict[str, Any]:
         raise
 
 
-def generate_upload_token(client_id: str, days_valid: int = 30) -> tuple[str, str]:
+def generate_upload_token(client_id: str, days_valid: int = 30, reminder_preferences: Optional[Dict[str, int]] = None) -> tuple[str, str]:
     """
     Generate secure upload token and update client record.
     
     Args:
         client_id: Client identifier
         days_valid: Number of days token is valid
+        reminder_preferences: Optional reminder timing preferences
     
     Returns:
         Tuple of (upload_token, token_expires)
@@ -107,15 +108,24 @@ def generate_upload_token(client_id: str, days_valid: int = 30) -> tuple[str, st
     token_expires = (datetime.utcnow() + timedelta(days=days_valid)).isoformat()
     
     try:
+        # Build update expression
+        update_expression = 'SET upload_token = :token, token_expires = :expires, token_generated_at = :generated'
+        expression_values = {
+            ':token': upload_token,
+            ':expires': token_expires,
+            ':generated': datetime.utcnow().isoformat()
+        }
+        
+        # Add reminder preferences if provided
+        if reminder_preferences:
+            update_expression += ', reminder_preferences = :prefs'
+            expression_values[':prefs'] = reminder_preferences
+        
         # Update client record with token
         table.update_item(
             Key={'client_id': client_id},
-            UpdateExpression='SET upload_token = :token, token_expires = :expires, token_generated_at = :generated',
-            ExpressionAttributeValues={
-                ':token': upload_token,
-                ':expires': token_expires,
-                ':generated': datetime.utcnow().isoformat()
-            }
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values
         )
         
         logger.info(f"Upload token generated for client {client_id}, expires: {token_expires}")
@@ -327,6 +337,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         client_id = event.get('client_id')
         days_valid = event.get('days_valid', 30)
         custom_message = event.get('custom_message')
+        reminder_preferences = event.get('reminder_preferences')
         
         # Validate required parameters
         if not client_id:
@@ -345,7 +356,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             raise ValueError(f"Client {client_id} has no email address on file")
         
         # Generate upload token
-        upload_token, token_expires = generate_upload_token(client_id, days_valid)
+        upload_token, token_expires = generate_upload_token(
+            client_id=client_id, 
+            days_valid=days_valid,
+            reminder_preferences=reminder_preferences
+        )
         
         # Generate upload URL
         upload_url = generate_upload_url(client_id, upload_token)
