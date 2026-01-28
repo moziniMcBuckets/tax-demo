@@ -10,16 +10,36 @@ import { useGlobal } from "@/app/context/GlobalContext"
 import { invokeAgentCore, generateSessionId, setAgentConfig } from "@/services/agentCoreService"
 import { submitFeedback } from "@/services/feedbackService"
 import { useAuth } from "react-oidc-context"
+import { getOrCreateSession, startNewSession } from "@/lib/sessionManager"
 
 export default function ChatInterface() {
   // State for chat messages and user input
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
-  const [sessionId] = useState(() => generateSessionId())
   const [error, setError] = useState<string | null>(null)
 
   const { isLoading, setIsLoading } = useGlobal()
   const auth = useAuth()
+  
+  // Get user ID from auth
+  const userId = auth.user?.profile?.sub
+
+  // Use persistent session ID that survives navigation
+  const [sessionId, setSessionId] = useState<string>(() => {
+    if (userId) {
+      return getOrCreateSession(userId);
+    }
+    return generateSessionId(); // Fallback if not authenticated yet
+  })
+
+  // Update session when user logs in
+  useEffect(() => {
+    if (userId) {
+      const persistedSessionId = getOrCreateSession(userId);
+      setSessionId(persistedSessionId);
+      console.log(`Using persistent session for user ${userId}: ${persistedSessionId}`);
+    }
+  }, [userId])
 
   // Ref for message container to enable auto-scrolling
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -173,11 +193,14 @@ export default function ChatInterface() {
 
   // Start a new chat (generates new session ID)
   const startNewChat = () => {
+    if (userId) {
+      const newSessionId = startNewSession(userId);
+      setSessionId(newSessionId);
+      console.log(`Started new chat session: ${newSessionId}`);
+    }
     setMessages([])
     setInput("")
     setError(null)
-    // Note: sessionId stays the same for the component lifecycle
-    // If you want a new session ID, you'd need to remount the component
   }
 
   // Check if this is the initial state (no messages)
