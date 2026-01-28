@@ -1068,6 +1068,9 @@ export class BackendStack extends cdk.NestedStack {
     // Lambda invoke permission for tax tools only
     Object.values(this.taxLambdaFunctions).forEach(fn => fn.grantInvoke(gatewayRole));
 
+    // Store Lambda functions for target creation
+    const taxLambdaFunctionsMap = this.taxLambdaFunctions;
+
     // Bedrock permissions (region-agnostic)
     gatewayRole.addToPolicy(
       new iam.PolicyStatement({
@@ -1142,6 +1145,12 @@ export class BackendStack extends cdk.NestedStack {
       description: "AgentCore Gateway with MCP protocol and JWT authentication",
     })
 
+    // Ensure Gateway waits for all Lambda functions and role to be ready
+    gateway.node.addDependency(gatewayRole);
+    Object.values(taxLambdaFunctionsMap).forEach(fn => {
+      gateway.node.addDependency(fn);
+    });
+
     // Add tax Gateway targets with SHORT names (to stay under 64 char limit)
     taxLambdas.forEach(toolConfig => {
       const toolSpec = JSON.parse(
@@ -1158,7 +1167,7 @@ export class BackendStack extends cdk.NestedStack {
         targetConfiguration: {
           mcp: {
             lambda: {
-              lambdaArn: this.taxLambdaFunctions[toolConfig.id].functionArn,
+              lambdaArn: taxLambdaFunctionsMap[toolConfig.id].functionArn,
               toolSchema: {
                 inlinePayload: [toolSpec],
               },
@@ -1172,7 +1181,10 @@ export class BackendStack extends cdk.NestedStack {
         ],
       });
 
+      // Add dependencies to ensure proper creation order
       target.addDependency(gateway);
+      target.node.addDependency(gatewayRole);
+      target.node.addDependency(taxLambdaFunctionsMap[toolConfig.id]);
     });
 
     // Store Gateway URL in SSM for runtime access
