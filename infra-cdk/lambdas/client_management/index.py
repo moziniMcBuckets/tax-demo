@@ -9,6 +9,9 @@ Handles client CRUD operations:
 - Update client information
 - Delete client (soft delete)
 - Get client details
+- List all clients for accountant (via GET with JWT)
+
+Version: 1.1.0 - Added GET endpoint for listing clients
 """
 
 import json

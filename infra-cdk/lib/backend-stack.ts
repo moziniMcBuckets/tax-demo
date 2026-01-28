@@ -1165,6 +1165,48 @@ export class BackendStack extends cdk.NestedStack {
       );
     });
 
+    // Grant all tax Lambdas permission to access their required DynamoDB tables
+    Object.values(this.taxLambdaFunctions).forEach(fn => {
+      fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query', 'dynamodb:Scan'],
+          resources: [
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-clients`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-clients/index/*`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-documents`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-documents/index/*`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-followups`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-followups/index/*`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-settings`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-settings/index/*`,
+          ]
+        })
+      );
+    });
+
+    // Grant S3 permissions to Gateway Lambdas that need it
+    Object.values(this.taxLambdaFunctions).forEach(fn => {
+      fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['s3:GetObject', 's3:PutObject', 's3:ListBucket'],
+          resources: [
+            `arn:aws:s3:::${config.stack_name_base}-client-docs-${this.account}`,
+            `arn:aws:s3:::${config.stack_name_base}-client-docs-${this.account}/*`
+          ]
+        })
+      );
+    });
+
+    // Grant SES permissions to Gateway Lambdas
+    Object.values(this.taxLambdaFunctions).forEach(fn => {
+      fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+          resources: ['*']
+        })
+      );
+    });
+
     // Grant send_upload_link Lambda SNS permissions for SMS
     if (this.taxLambdaFunctions['TaxSendLink']) {
       this.taxLambdaFunctions['TaxSendLink'].addToRolePolicy(
