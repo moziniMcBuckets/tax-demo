@@ -7,6 +7,8 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb"
 import * as apigateway from "aws-cdk-lib/aws-apigateway"
 import * as logs from "aws-cdk-lib/aws-logs"
 import * as s3 from "aws-cdk-lib/aws-s3"
+import * as s3n from "aws-cdk-lib/aws-s3-notifications"
+import * as sns from "aws-cdk-lib/aws-sns"
 import * as agentcore from "@aws-cdk/aws-bedrock-agentcore-alpha"
 import * as bedrockagentcore from "aws-cdk-lib/aws-bedrockagentcore"
 import { PythonFunction } from "@aws-cdk/aws-lambda-python-alpha"
@@ -95,6 +97,9 @@ export class BackendStack extends cdk.NestedStack {
 
     // Create Usage Tracking table for billing
     const usageTable = this.createUsageTrackingTable(props.config)
+
+    // Create Tax Agent DynamoDB tables
+    this.createTaxAgentTables(props.config)
 
     // Create API Gateway Feedback API resources (example of best-practice API Gateway + Lambda
     // pattern)
@@ -394,60 +399,37 @@ export class BackendStack extends cdk.NestedStack {
     })
   }
 
-  // Configure CORS for existing client documents S3 bucket
+  // Create and configure client documents S3 bucket
   private configureClientDocumentsBucket(config: AppConfig, frontendUrl: string): void {
     const bucketName = `${config.stack_name_base}-client-docs-${this.account}`;
     const documentsTableName = `${config.stack_name_base}-documents`;
     
-    // Import existing bucket
-    const clientBucket = s3.Bucket.fromBucketName(
-      this,
-      "ClientDocumentsBucket",
-      bucketName
-    );
-    
-    // Add CORS configuration using custom resource
-    const corsConfig = {
-      CORSRules: [
+    // Create the client documents bucket
+    const clientBucket = new s3.Bucket(this, "ClientDocumentsBucket", {
+      bucketName: bucketName,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      versioned: false,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      cors: [
         {
-          AllowedHeaders: ['*'],
-          AllowedMethods: ['GET', 'PUT', 'POST', 'HEAD'],
-          AllowedOrigins: [
+          allowedHeaders: ['*'],
+          allowedMethods: [
+            s3.HttpMethods.GET,
+            s3.HttpMethods.PUT,
+            s3.HttpMethods.POST,
+            s3.HttpMethods.HEAD
+          ],
+          allowedOrigins: [
             frontendUrl,
             'http://localhost:3000',
             'https://*.amplifyapp.com'
           ],
-          ExposeHeaders: ['ETag'],
-          MaxAgeSeconds: 3000
+          exposedHeaders: ['ETag'],
+          maxAge: 3000
         }
       ]
-    };
-    
-    new cr.AwsCustomResource(this, 'ClientBucketCorsConfig', {
-      onCreate: {
-        service: 'S3',
-        action: 'putBucketCors',
-        parameters: {
-          Bucket: bucketName,
-          CORSConfiguration: corsConfig
-        },
-        physicalResourceId: cr.PhysicalResourceId.of(`${bucketName}-cors`)
-      },
-      onUpdate: {
-        service: 'S3',
-        action: 'putBucketCors',
-        parameters: {
-          Bucket: bucketName,
-          CORSConfiguration: corsConfig
-        },
-        physicalResourceId: cr.PhysicalResourceId.of(`${bucketName}-cors`)
-      },
-      policy: cr.AwsCustomResourcePolicy.fromStatements([
-        new iam.PolicyStatement({
-          actions: ['s3:PutBucketCors', 's3:GetBucketCors'],
-          resources: [`arn:aws:s3:::${bucketName}`]
-        })
-      ])
     });
     
     // Create Document Processor Lambda (triggered by S3 events)
@@ -613,6 +595,139 @@ export class BackendStack extends cdk.NestedStack {
     })
 
     return usageTable
+  }
+
+  // Creates DynamoDB tables for tax agent data
+  private createTaxAgentTables(config: AppConfig): void {
+    // Clients Table
+    const clientsTable = new dynamodb.Table(this, "ClientsTable", {
+      tableName: `${config.stack_name_base}-clients`,
+      partitionKey: {
+        name: "client_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: true,
+      },
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+    });
+
+    // Add GSI for querying by accountant_id
+    clientsTable.addGlobalSecondaryIndex({
+      indexName: "accountant_id-index",
+      partitionKey: {
+        name: "accountant_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // Documents Table
+    const documentsTable = new dynamodb.Table(this, "DocumentsTable", {
+      tableName: `${config.stack_name_base}-documents`,
+      partitionKey: {
+        name: "client_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "document_type",
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: true,
+      },
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+    });
+
+    // Followups Table
+    const followupsTable = new dynamodb.Table(this, "FollowupsTable", {
+      tableName: `${config.stack_name_base}-followups`,
+      partitionKey: {
+        name: "client_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "followup_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: true,
+      },
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+    });
+
+    // Add GSI for querying by accountant_id
+    followupsTable.addGlobalSecondaryIndex({
+      indexName: "accountant_id-index",
+      partitionKey: {
+        name: "accountant_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // Settings Table
+    const settingsTable = new dynamodb.Table(this, "SettingsTable", {
+      tableName: `${config.stack_name_base}-settings`,
+      partitionKey: {
+        name: "accountant_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "setting_key",
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: true,
+      },
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+    });
+
+    // Store table names in SSM for reference
+    new ssm.StringParameter(this, "ClientsTableParam", {
+      parameterName: `/${config.stack_name_base}/clients-table`,
+      stringValue: clientsTable.tableName,
+      description: "Clients table name",
+    });
+
+    new ssm.StringParameter(this, "DocumentsTableParam", {
+      parameterName: `/${config.stack_name_base}/documents-table`,
+      stringValue: documentsTable.tableName,
+      description: "Documents table name",
+    });
+
+    new ssm.StringParameter(this, "FollowupsTableParam", {
+      parameterName: `/${config.stack_name_base}/followups-table`,
+      stringValue: followupsTable.tableName,
+      description: "Followups table name",
+    });
+
+    new ssm.StringParameter(this, "SettingsTableParam", {
+      parameterName: `/${config.stack_name_base}/settings-table`,
+      stringValue: settingsTable.tableName,
+      description: "Settings table name",
+    });
+
+    // Create SNS topic for escalations
+    const escalationTopic = new sns.Topic(this, "EscalationTopic", {
+      topicName: `${config.stack_name_base}-escalations`,
+      displayName: "Tax Agent Escalations",
+      fifo: false,
+    });
+
+    new ssm.StringParameter(this, "EscalationTopicParam", {
+      parameterName: `/${config.stack_name_base}/escalation-topic`,
+      stringValue: escalationTopic.topicArn,
+      description: "Escalation SNS topic ARN",
+    });
   }
 
   /**
