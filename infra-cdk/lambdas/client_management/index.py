@@ -119,7 +119,56 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Accountant ID from JWT: {accountant_id}")
         
-        if http_method == 'POST':
+        if http_method == 'GET':
+            # List all clients for this accountant
+            table = dynamodb.Table(CLIENTS_TABLE)
+            
+            try:
+                # Query by accountant_id using GSI
+                response = table.query(
+                    IndexName='accountant_id-index',
+                    KeyConditionExpression='accountant_id = :aid',
+                    ExpressionAttributeValues={':aid': accountant_id}
+                )
+                
+                clients = response.get('Items', [])
+                
+                # Calculate summary
+                summary = {
+                    'total_clients': len(clients),
+                    'complete': len([c for c in clients if c.get('status') == 'complete']),
+                    'incomplete': len([c for c in clients if c.get('status') == 'incomplete']),
+                    'at_risk': len([c for c in clients if c.get('status') == 'at_risk']),
+                    'escalated': len([c for c in clients if c.get('status') == 'escalated']),
+                }
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                    },
+                    'body': json.dumps({
+                        'success': True,
+                        'clients': clients,
+                        'summary': summary
+                    }, default=str)  # Handle Decimal types
+                }
+            except ClientError as e:
+                logger.error(f"Error querying clients: {e}")
+                return {
+                    'statusCode': 500,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                    },
+                    'body': json.dumps({
+                        'success': False,
+                        'error': str(e)
+                    })
+                }
+        
+        elif http_method == 'POST':
             # Create new client
             required_fields = ['client_name', 'email']
             missing = [f for f in required_fields if not body.get(f)]

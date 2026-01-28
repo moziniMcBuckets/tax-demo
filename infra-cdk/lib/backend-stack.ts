@@ -853,9 +853,10 @@ export class BackendStack extends cdk.NestedStack {
     // Grant permissions for client management
     clientMgmtLambda.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem', 'dynamodb:Query'],
         resources: [
           `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-clients`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-clients/index/*`,
         ]
       })
     );
