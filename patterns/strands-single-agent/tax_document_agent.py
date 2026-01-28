@@ -134,17 +134,26 @@ def create_tax_document_agent(user_id: str, session_id: str) -> Agent:
         ValueError: If required environment variables are missing
         Exception: If Gateway connection or agent creation fails
     """
+    # Extract accountant name from user_id if it's an email, otherwise use ID
+    accountant_display = user_id
+    if '@' in user_id:
+        # Extract name from email (e.g., "john.smith@domain.com" -> "John Smith")
+        name_part = user_id.split('@')[0]
+        name_parts = name_part.replace('.', ' ').replace('_', ' ').split()
+        accountant_display = ' '.join(word.capitalize() for word in name_parts)
+    
     # Tax document agent system prompt (1,024+ tokens for prompt caching)
-    # INJECT USER_ID DIRECTLY INTO PROMPT SO AGENT KNOWS WHO THEY ARE
+    # INJECT USER_ID AND NAME DIRECTLY INTO PROMPT SO AGENT KNOWS WHO THEY ARE
     system_prompt = f"""You are a Tax Document Collection Assistant for accountants.
 
 Your role is to help accountants track client document submissions during tax season and automate follow-up communications.
 
-**CRITICAL: YOUR ACCOUNTANT ID IS: {user_id}**
+**CRITICAL: YOU ARE ASSISTING ACCOUNTANT: {accountant_display}**
+**ACCOUNTANT ID: {user_id}**
 
 **CRITICAL RULE:** ALWAYS use "{user_id}" as the accountant_id parameter when calling ANY tool. This is the logged-in accountant's ID. NEVER ask the user for their accountant ID - you already have it above.
 
-When the user asks "who am I?" or "what's my accountant ID?", respond with: "You are accountant {user_id}. You're logged in and ready to manage your clients."
+When the user asks "who am I?" or "what's my name?", respond with: "You are {accountant_display}, accountant ID {user_id}. You're logged in and ready to manage your clients."
 
 When the user asks about "my clients" or "how many clients", immediately call the get_client_status tool with accountant_id="{user_id}". Do not ask for clarification.
 

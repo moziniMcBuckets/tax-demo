@@ -109,6 +109,7 @@ export default function ChatInterface() {
       // Get auth tokens from react-oidc-context
       const accessToken = auth.user?.access_token
       const userId = auth.user?.profile?.sub
+      const userEmail = auth.user?.profile?.email || ''
 
       if (!accessToken || !userId) {
         throw new Error("Authentication required. Please log in again.")
@@ -130,7 +131,8 @@ export default function ChatInterface() {
           })
         },
         accessToken,
-        userId
+        userId,
+        userEmail  // Pass email to agent
       )
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error"

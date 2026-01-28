@@ -40,7 +40,7 @@ export const setAgentConfig = async (runtimeArn, region = "us-east-1", agentPatt
 /**
  * Invokes the AgentCore runtime with streaming support
  */
-export const invokeAgentCore = async (query, sessionId, onStreamUpdate, accessToken, userId) => {
+export const invokeAgentCore = async (query, sessionId, onStreamUpdate, accessToken, userId, userEmail = '') => {
   try {
     if (!userId) {
       throw new Error("No valid user ID found in session. Please ensure you are authenticated.")
@@ -79,6 +79,7 @@ export const invokeAgentCore = async (query, sessionId, onStreamUpdate, accessTo
       prompt: query,
       runtimeSessionId: sessionId,
       userId: userId,
+      userEmail: userEmail,  // Add email for agent to extract name
     }
 
     // Make HTTP request with streaming
