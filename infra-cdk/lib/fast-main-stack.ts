@@ -20,6 +20,14 @@ export class FastMainStack extends cdk.Stack {
     const description = "Fullstack AgentCore Solution Template - Main Stack (v0.3.0) (uksb-v6dos0t5g8)"
     super(scope, id, { ...props, description })
 
+    // Add tags to all resources in this stack
+    cdk.Tags.of(this).add('Project', 'TaxDocumentAgent');
+    cdk.Tags.of(this).add('Environment', 'Production');
+    cdk.Tags.of(this).add('ManagedBy', 'CDK');
+    cdk.Tags.of(this).add('Application', 'tax-agent');
+    cdk.Tags.of(this).add('CostCenter', props.config.stack_name_base);
+    cdk.Tags.of(this).add('Version', '0.3.0');
+
     // Step 1: Create the Amplify stack to get the predictable domain
     this.amplifyHostingStack = new AmplifyHostingStack(this, `${id}-amplify`, {
       config: props.config,
