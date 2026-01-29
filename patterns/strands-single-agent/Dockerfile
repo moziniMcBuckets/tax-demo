@@ -1,5 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
+# Version: 1.1.0 - Tax document agent with accountant name display
 
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
