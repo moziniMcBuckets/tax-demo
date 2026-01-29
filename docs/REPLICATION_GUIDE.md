@@ -10,15 +10,17 @@ This guide provides step-by-step instructions to deploy the Tax Document Agent t
 **Prerequisites:** AWS account with admin access
 
 **What You'll Deploy:**
-- 10 Lambda functions (7 Gateway tools + 3 API functions)
-- 6 DynamoDB tables with GSIs
+- 13 Lambda functions (7 Gateway tools + 4 API functions + 2 utility)
+- 6 DynamoDB tables with GSIs (all created via CDK)
+- S3 bucket for client documents (created via CDK)
+- SNS topic for escalations (created via CDK)
 - AgentCore (Gateway, Runtime, Memory)
 - API Gateway with 8 endpoints
 - Cognito with self-service sign-up
-- S3 with event notifications
 - Usage tracking for billing
 - Client selection UI with personalized reminder timing
 - SMS notifications via Amazon SNS (requires production access)
+- Session persistence for chat history
 
 ---
 
