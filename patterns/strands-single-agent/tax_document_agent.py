@@ -341,6 +341,9 @@ async def agent_stream(payload):
         )
         print(f"[STREAM] Query: {user_query}")
 
+        # Track Runtime invocation for billing
+        track_runtime_usage(user_id)
+
         # Create tax document agent
         agent = create_tax_document_agent(user_id, session_id)
 
@@ -354,6 +357,47 @@ async def agent_stream(payload):
         print(f"[STREAM ERROR] Error in agent_stream: {e}")
         traceback.print_exc()
         yield {"status": "error", "error": str(e)}
+
+
+def track_runtime_usage(accountant_id: str):
+    """
+    Track AgentCore Runtime invocation for billing.
+    
+    Args:
+        accountant_id: Accountant user ID
+    """
+    try:
+        import boto3
+        from datetime import datetime
+        from decimal import Decimal
+        
+        dynamodb = boto3.resource('dynamodb')
+        usage_table_name = os.environ.get('USAGE_TABLE', 'tax-agent-usage')
+        usage_table = dynamodb.Table(usage_table_name)
+        
+        timestamp = datetime.utcnow().isoformat()
+        month = timestamp[:7]
+        
+        # AgentCore Runtime pricing: $0.003 per invocation
+        unit_cost = Decimal('0.003')
+        quantity = Decimal('1')
+        estimated_cost = unit_cost * quantity
+        
+        usage_table.put_item(Item={
+            'accountant_id': accountant_id,
+            'timestamp': timestamp,
+            'month': month,
+            'operation': 'agent_invocation',
+            'resource_type': 'agentcore_runtime',
+            'quantity': quantity,
+            'unit_cost': unit_cost,
+            'estimated_cost': estimated_cost
+        })
+        
+        print(f"[USAGE] Tracked Runtime invocation: ${float(estimated_cost):.6f}")
+    except Exception as e:
+        print(f"[USAGE ERROR] Failed to track usage: {e}")
+        # Don't fail the request if usage tracking fails
 
 
 if __name__ == "__main__":

@@ -291,6 +291,18 @@ export class BackendStack extends cdk.NestedStack {
       })
     )
 
+    // Add DynamoDB permissions for usage tracking
+    agentRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: "UsageTrackingAccess",
+        effect: iam.Effect.ALLOW,
+        actions: ["dynamodb:PutItem"],
+        resources: [
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${config.stack_name_base}-usage`,
+        ],
+      })
+    )
+
     // Add Code Interpreter permissions
     agentRole.addToPolicy(
       new iam.PolicyStatement({
@@ -311,6 +323,7 @@ export class BackendStack extends cdk.NestedStack {
       AWS_DEFAULT_REGION: stack.region,
       MEMORY_ID: memoryId,
       STACK_NAME: config.stack_name_base, // Required for agent to find SSM parameters
+      USAGE_TABLE: `${config.stack_name_base}-usage`, // For tracking Runtime invocations
     }
 
     // Create the runtime using L2 construct
