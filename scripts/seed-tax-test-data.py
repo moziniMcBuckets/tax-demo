@@ -10,7 +10,14 @@ Creates sample clients, document requirements, and follow-up history
 for testing the tax document collection system.
 
 Usage:
-    python scripts/seed-tax-test-data.py
+    # Use your Cognito user ID (recommended)
+    python3 scripts/seed-tax-test-data.py YOUR_COGNITO_SUB
+    
+    # Or use default test accountant ID
+    python3 scripts/seed-tax-test-data.py
+    
+Example:
+    python3 scripts/seed-tax-test-data.py e8a1f3a0-8001-70a0-3ed9-3d4b95fc7500
 """
 
 import sys
@@ -593,8 +600,15 @@ def main():
     dynamodb = boto3.resource('dynamodb')
     s3_client = boto3.client('s3')
     
-    # Generate accountant ID
-    accountant_id = 'acc_test_001'
+    # Get accountant ID from command line or use default
+    if len(sys.argv) > 1:
+        accountant_id = sys.argv[1]
+        print(f"Using provided accountant ID: {accountant_id}\n")
+    else:
+        accountant_id = 'acc_test_001'
+        print(f"⚠️  Using default accountant ID: {accountant_id}")
+        print(f"   To use your Cognito user ID, run:")
+        print(f"   python3 scripts/seed-tax-test-data.py YOUR_COGNITO_SUB\n")
     
     # Create sample data
     print_section("Creating Sample Clients")
