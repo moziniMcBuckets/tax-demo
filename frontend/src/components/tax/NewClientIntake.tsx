@@ -36,6 +36,7 @@ export function NewClientIntake({ onClientCreated }: NewClientIntakeProps) {
     client_name: '',
     email: '',
     phone: '',
+    sms_enabled: false,
     client_type: 'individual',
     notes: ''
   });
@@ -86,6 +87,7 @@ export function NewClientIntake({ onClientCreated }: NewClientIntakeProps) {
             client_name: '',
             email: '',
             phone: '',
+            sms_enabled: false,
             client_type: 'individual',
             notes: ''
           });
@@ -186,11 +188,32 @@ export function NewClientIntake({ onClientCreated }: NewClientIntakeProps) {
               </label>
               <Input
                 type="tel"
-                placeholder="+1-555-0123"
+                placeholder="+12065551234"
                 value={formData.phone}
                 onChange={(e) => setFormData({...formData, phone: e.target.value})}
               />
+              <p className="text-xs text-gray-500">
+                E.164 format for SMS: +1XXXXXXXXXX (US only)
+              </p>
             </div>
+
+            {/* SMS Opt-in */}
+            {formData.phone && (
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.sms_enabled}
+                    onChange={(e) => setFormData({...formData, sms_enabled: e.target.checked})}
+                    className="rounded"
+                  />
+                  <span className="text-sm font-medium">Enable SMS notifications</span>
+                </label>
+                <p className="text-xs text-gray-500 ml-6">
+                  Client will receive text messages for reminders and updates ($0.00645 per SMS)
+                </p>
+              </div>
+            )}
 
             {/* Client Type */}
             <div className="space-y-2">

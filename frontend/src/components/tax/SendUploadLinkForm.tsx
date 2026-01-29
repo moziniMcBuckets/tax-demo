@@ -33,6 +33,8 @@ interface Client {
   client_id: string;
   client_name: string;
   email: string;
+  phone?: string;
+  sms_enabled?: boolean;
   status: string;
 }
 
@@ -57,6 +59,7 @@ export function SendUploadLinkForm() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [daysValid, setDaysValid] = useState<number>(30);
   const [customMessage, setCustomMessage] = useState<string>('');
+  const [sendVia, setSendVia] = useState<string>('both');  // 'email', 'sms', or 'both'
   const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences>(DEFAULT_PREFERENCES);
   const [useCustomReminders, setUseCustomReminders] = useState<boolean>(false);
   
@@ -155,6 +158,7 @@ export function SendUploadLinkForm() {
           client_ids: [selectedClientId],
           options: {
             days_valid: daysValid,
+            send_via: sendVia,
             custom_message: customMessage || undefined,
             reminder_preferences: useCustomReminders ? reminderPreferences : undefined
           }
@@ -254,6 +258,13 @@ export function SendUploadLinkForm() {
             {selectedClient && (
               <p className="text-sm text-gray-500 mt-2">
                 Status: <span className="font-medium">{selectedClient.status}</span>
+                {selectedClient.phone && (
+                  <span className="ml-4">
+                    📱 Phone: {selectedClient.phone}
+                    {selectedClient.sms_enabled && <span className="text-green-600 ml-2">✓ SMS enabled</span>}
+                    {!selectedClient.sms_enabled && <span className="text-gray-400 ml-2">SMS disabled</span>}
+                  </span>
+                )}
               </p>
             )}
           </div>
@@ -274,6 +285,58 @@ export function SendUploadLinkForm() {
             />
             <p className="text-sm text-gray-500 mt-1">
               The upload link will expire after this many days (1-90)
+            </p>
+          </div>
+
+          {/* Channel Selection */}
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Send Via *
+            </label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="sendVia"
+                  value="email"
+                  checked={sendVia === 'email'}
+                  onChange={(e) => setSendVia(e.target.value)}
+                  disabled={loading}
+                  className="rounded"
+                />
+                <span className="text-sm">Email only</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="sendVia"
+                  value="sms"
+                  checked={sendVia === 'sms'}
+                  onChange={(e) => setSendVia(e.target.value)}
+                  disabled={loading || !selectedClient?.phone || !selectedClient?.sms_enabled}
+                  className="rounded"
+                />
+                <span className="text-sm">SMS only</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="sendVia"
+                  value="both"
+                  checked={sendVia === 'both'}
+                  onChange={(e) => setSendVia(e.target.value)}
+                  disabled={loading}
+                  className="rounded"
+                />
+                <span className="text-sm">Both (Email + SMS)</span>
+              </label>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">
+              {sendVia === 'email' && 'Email only ($0.0001 per send)'}
+              {sendVia === 'sms' && selectedClient?.phone && selectedClient?.sms_enabled && 'SMS only ($0.00645 per send)'}
+              {sendVia === 'sms' && (!selectedClient?.phone || !selectedClient?.sms_enabled) && 'SMS not available (no phone or SMS disabled)'}
+              {sendVia === 'both' && selectedClient?.phone && selectedClient?.sms_enabled && 'Email + SMS ($0.00655 per send)'}
+              {sendVia === 'both' && (!selectedClient?.phone || !selectedClient?.sms_enabled) && 'Email only (SMS not available)'}
             </p>
           </div>
 
