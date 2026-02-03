@@ -1,0 +1,108 @@
+{
+  "toolSpec": {
+    "name": "invoice_collection_tools",
+    "description": "Tools for generating invoices, tracking payments, and sending reminders",
+    "tools": [
+      {
+        "name": "generate_invoice",
+        "description": "Generate invoice PDF with service details",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "appointment_id": {
+              "type": "string",
+              "description": "Appointment identifier"
+            },
+            "line_items": {
+              "type": "array",
+              "description": "Invoice line items",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "description": {"type": "string"},
+                  "quantity": {"type": "number"},
+                  "rate": {"type": "number"},
+                  "amount": {"type": "number"}
+                }
+              }
+            },
+            "tax_rate": {
+              "type": "number",
+              "description": "Tax rate (e.g., 0.08 for 8%)"
+            }
+          },
+          "required": ["appointment_id", "line_items"]
+        }
+      },
+      {
+        "name": "create_payment_link",
+        "description": "Generate Stripe payment link for invoice",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "invoice_id": {
+              "type": "string",
+              "description": "Invoice identifier"
+            },
+            "amount": {
+              "type": "number",
+              "description": "Payment amount in dollars"
+            },
+            "customer_email": {
+              "type": "string",
+              "description": "Customer email for payment receipt"
+            }
+          },
+          "required": ["invoice_id", "amount", "customer_email"]
+        }
+      },
+      {
+        "name": "send_invoice",
+        "description": "Send invoice via email with PDF and payment link",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "invoice_id": {
+              "type": "string",
+              "description": "Invoice identifier"
+            }
+          },
+          "required": ["invoice_id"]
+        }
+      },
+      {
+        "name": "check_payment_status",
+        "description": "Check if invoice has been paid",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "invoice_id": {
+              "type": "string",
+              "description": "Invoice identifier"
+            }
+          },
+          "required": ["invoice_id"]
+        }
+      },
+      {
+        "name": "send_payment_reminder",
+        "description": "Send payment reminder for overdue invoice",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "invoice_id": {
+              "type": "string",
+              "description": "Invoice identifier"
+            },
+            "reminder_type": {
+              "type": "string",
+              "description": "Type of reminder (gentle, firm, final)",
+              "enum": ["gentle", "firm", "final"]
+            }
+          },
+          "required": ["invoice_id"]
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "toolSpec": {
+    "name": "lead_response_tools",
+    "description": "Tools for monitoring and responding to lead inquiries",
+    "tools": [
+      {
+        "name": "monitor_email",
+        "description": "Monitor Gmail/Outlook inbox for new lead inquiries",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "qualify_lead",
+        "description": "Qualify and score a lead based on criteria",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Customer name"
+            },
+            "email": {
+              "type": "string",
+              "description": "Customer email"
+            },
+            "phone": {
+              "type": "string",
+              "description": "Customer phone number"
+            },
+            "service_needed": {
+              "type": "string",
+              "description": "Service requested (HVAC, plumbing, electrical, etc.)"
+            },
+            "urgency": {
+              "type": "string",
+              "description": "Urgency level (emergency, this_week, flexible)"
+            },
+            "budget": {
+              "type": "string",
+              "description": "Budget range"
+            },
+            "location": {
+              "type": "string",
+              "description": "Customer location/address"
+            }
+          },
+          "required": ["name", "service_needed"]
+        }
+      },
+      {
+        "name": "send_response",
+        "description": "Send response to lead via email or SMS",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "lead_id": {
+              "type": "string",
+              "description": "Lead identifier"
+            },
+            "contact_method": {
+              "type": "string",
+              "description": "How to contact (email or sms)",
+              "enum": ["email", "sms"]
+            },
+            "message": {
+              "type": "string",
+              "description": "Message to send"
+            }
+          },
+          "required": ["lead_id", "contact_method", "message"]
+        }
+      }
+    ]
+  }
+}
