@@ -1,11 +1,12 @@
-# Vela Operations Squad
+# RainCity Operations Squad
 
-**Company:** Vela (vela.ai)  
+**Company:** RainCity (raincity.ai)  
 **Status:** 🚀 In Development - Week 1  
 **Launch Target:** 4 weeks
 
 An intelligent AI squad built on Amazon Bedrock AgentCore that automates operations for home services businesses. Three specialized agents work together using Swarm orchestration to handle lead response, appointment scheduling, and invoice collection.
 
+**Tagline:** "AI That Works Rain or Shine"  
 **Target Market:** Home services (plumbers, HVAC, electricians, contractors, landscapers)
 
 ---
@@ -206,6 +207,12 @@ vela-operations-squad/
 
 ---
 
+## Why RainCity?
+
+Like Seattle's reliable rain, RainCity AI works consistently—rain or shine, day or night. Your operations run smoothly 24/7, just like clockwork.
+
+---
+
 ## Market Validation
 
 **AI Agents Market:**
@@ -251,9 +258,9 @@ Apache-2.0
 ## Contact
 
 **Founders:** [Your Name] + [Partner Name]  
-**Company:** Vela  
-**Website:** vela.ai (launching soon)  
-**Email:** founders@vela.ai
+**Company:** RainCity  
+**Website:** raincity.ai (launching soon)  
+**Email:** founders@raincity.ai
 
 ---
 
